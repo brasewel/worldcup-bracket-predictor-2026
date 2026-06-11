@@ -3,11 +3,80 @@ export interface TeamDef {
   name: string;
 }
 
-// Groups data is injected by the server into window.__GROUPS_JSON__
-// We parse it once here so all modules share the same reference.
-export const GROUPS_DATA: Record<string, TeamDef[]> = JSON.parse(
-  (window as any).__GROUPS_JSON__ ?? '{}'
-);
+export const GROUPS_DATA: Record<string, TeamDef[]> = {
+  A: [
+    { flag: '🇲🇽', name: 'Mexico' },
+    { flag: '🇿🇦', name: 'South Africa' },
+    { flag: '🇰🇷', name: 'South Korea' },
+    { flag: '🇨🇿', name: 'Czechia' },
+  ],
+  B: [
+    { flag: '🇨🇦', name: 'Canada' },
+    { flag: '🇧🇦', name: 'Bosnia & Herzegovina' },
+    { flag: '🇶🇦', name: 'Qatar' },
+    { flag: '🇨🇭', name: 'Switzerland' },
+  ],
+  C: [
+    { flag: '🇧🇷', name: 'Brazil' },
+    { flag: '🇲🇦', name: 'Morocco' },
+    { flag: '🇭🇹', name: 'Haiti' },
+    { flag: '🏴󠁧󠁢󠁳󠁣󠁴󠁿', name: 'Scotland' },
+  ],
+  D: [
+    { flag: '🇺🇸', name: 'USA' },
+    { flag: '🇵🇾', name: 'Paraguay' },
+    { flag: '🇦🇺', name: 'Australia' },
+    { flag: '🇹🇷', name: 'Türkiye' },
+  ],
+  E: [
+    { flag: '🇩🇪', name: 'Germany' },
+    { flag: '🇨🇼', name: 'Curaçao' },
+    { flag: '🇨🇮', name: 'Ivory Coast' },
+    { flag: '🇪🇨', name: 'Ecuador' },
+  ],
+  F: [
+    { flag: '🇳🇱', name: 'Netherlands' },
+    { flag: '🇯🇵', name: 'Japan' },
+    { flag: '🇸🇪', name: 'Sweden' },
+    { flag: '🇹🇳', name: 'Tunisia' },
+  ],
+  G: [
+    { flag: '🇧🇪', name: 'Belgium' },
+    { flag: '🇪🇬', name: 'Egypt' },
+    { flag: '🇮🇷', name: 'Iran' },
+    { flag: '🇳🇿', name: 'New Zealand' },
+  ],
+  H: [
+    { flag: '🇪🇸', name: 'Spain' },
+    { flag: '🇨🇻', name: 'Cape Verde' },
+    { flag: '🇸🇦', name: 'Saudi Arabia' },
+    { flag: '🇺🇾', name: 'Uruguay' },
+  ],
+  I: [
+    { flag: '🇫🇷', name: 'France' },
+    { flag: '🇸🇳', name: 'Senegal' },
+    { flag: '🇮🇶', name: 'Iraq' },
+    { flag: '🇳🇴', name: 'Norway' },
+  ],
+  J: [
+    { flag: '🇦🇷', name: 'Argentina' },
+    { flag: '🇩🇿', name: 'Algeria' },
+    { flag: '🇦🇹', name: 'Austria' },
+    { flag: '🇯🇴', name: 'Jordan' },
+  ],
+  K: [
+    { flag: '🇵🇹', name: 'Portugal' },
+    { flag: '🇨🇩', name: 'DR Congo' },
+    { flag: '🇺🇿', name: 'Uzbekistan' },
+    { flag: '🇨🇴', name: 'Colombia' },
+  ],
+  L: [
+    { flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿', name: 'England' },
+    { flag: '🇭🇷', name: 'Croatia' },
+    { flag: '🇬🇭', name: 'Ghana' },
+    { flag: '🇵🇦', name: 'Panama' },
+  ],
+};
 
 export function getFlagForTeam(name: string): string {
   for (const teams of Object.values(GROUPS_DATA)) {

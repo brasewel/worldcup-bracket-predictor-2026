@@ -276,7 +276,7 @@ function switchTab(tab: string): void {
   const isBracket = tab === 'bracket';
   const isSchedule = tab === 'schedule';
   const isLeaderboard = tab === 'leaderboard';
-  const loaded = state.bracketLoaded;
+  const loaded = state.bracketLoaded || state.isViewing;
 
   document.getElementById('bracket-content')!.style.display = (isBracket && loaded) ? 'block' : 'none';
   document.getElementById('pre-login-placeholder')!.style.display = (isBracket && !loaded) ? 'flex' : 'none';

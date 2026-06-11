@@ -1,9 +1,80 @@
 "use strict";
 (() => {
   // src/client/data.ts
-  var GROUPS_DATA = JSON.parse(
-    window.__GROUPS_JSON__ ?? "{}"
-  );
+  var GROUPS_DATA = {
+    A: [
+      { flag: "\u{1F1F2}\u{1F1FD}", name: "Mexico" },
+      { flag: "\u{1F1FF}\u{1F1E6}", name: "South Africa" },
+      { flag: "\u{1F1F0}\u{1F1F7}", name: "South Korea" },
+      { flag: "\u{1F1E8}\u{1F1FF}", name: "Czechia" }
+    ],
+    B: [
+      { flag: "\u{1F1E8}\u{1F1E6}", name: "Canada" },
+      { flag: "\u{1F1E7}\u{1F1E6}", name: "Bosnia & Herzegovina" },
+      { flag: "\u{1F1F6}\u{1F1E6}", name: "Qatar" },
+      { flag: "\u{1F1E8}\u{1F1ED}", name: "Switzerland" }
+    ],
+    C: [
+      { flag: "\u{1F1E7}\u{1F1F7}", name: "Brazil" },
+      { flag: "\u{1F1F2}\u{1F1E6}", name: "Morocco" },
+      { flag: "\u{1F1ED}\u{1F1F9}", name: "Haiti" },
+      { flag: "\u{1F3F4}\u{E0067}\u{E0062}\u{E0073}\u{E0063}\u{E0074}\u{E007F}", name: "Scotland" }
+    ],
+    D: [
+      { flag: "\u{1F1FA}\u{1F1F8}", name: "USA" },
+      { flag: "\u{1F1F5}\u{1F1FE}", name: "Paraguay" },
+      { flag: "\u{1F1E6}\u{1F1FA}", name: "Australia" },
+      { flag: "\u{1F1F9}\u{1F1F7}", name: "T\xFCrkiye" }
+    ],
+    E: [
+      { flag: "\u{1F1E9}\u{1F1EA}", name: "Germany" },
+      { flag: "\u{1F1E8}\u{1F1FC}", name: "Cura\xE7ao" },
+      { flag: "\u{1F1E8}\u{1F1EE}", name: "Ivory Coast" },
+      { flag: "\u{1F1EA}\u{1F1E8}", name: "Ecuador" }
+    ],
+    F: [
+      { flag: "\u{1F1F3}\u{1F1F1}", name: "Netherlands" },
+      { flag: "\u{1F1EF}\u{1F1F5}", name: "Japan" },
+      { flag: "\u{1F1F8}\u{1F1EA}", name: "Sweden" },
+      { flag: "\u{1F1F9}\u{1F1F3}", name: "Tunisia" }
+    ],
+    G: [
+      { flag: "\u{1F1E7}\u{1F1EA}", name: "Belgium" },
+      { flag: "\u{1F1EA}\u{1F1EC}", name: "Egypt" },
+      { flag: "\u{1F1EE}\u{1F1F7}", name: "Iran" },
+      { flag: "\u{1F1F3}\u{1F1FF}", name: "New Zealand" }
+    ],
+    H: [
+      { flag: "\u{1F1EA}\u{1F1F8}", name: "Spain" },
+      { flag: "\u{1F1E8}\u{1F1FB}", name: "Cape Verde" },
+      { flag: "\u{1F1F8}\u{1F1E6}", name: "Saudi Arabia" },
+      { flag: "\u{1F1FA}\u{1F1FE}", name: "Uruguay" }
+    ],
+    I: [
+      { flag: "\u{1F1EB}\u{1F1F7}", name: "France" },
+      { flag: "\u{1F1F8}\u{1F1F3}", name: "Senegal" },
+      { flag: "\u{1F1EE}\u{1F1F6}", name: "Iraq" },
+      { flag: "\u{1F1F3}\u{1F1F4}", name: "Norway" }
+    ],
+    J: [
+      { flag: "\u{1F1E6}\u{1F1F7}", name: "Argentina" },
+      { flag: "\u{1F1E9}\u{1F1FF}", name: "Algeria" },
+      { flag: "\u{1F1E6}\u{1F1F9}", name: "Austria" },
+      { flag: "\u{1F1EF}\u{1F1F4}", name: "Jordan" }
+    ],
+    K: [
+      { flag: "\u{1F1F5}\u{1F1F9}", name: "Portugal" },
+      { flag: "\u{1F1E8}\u{1F1E9}", name: "DR Congo" },
+      { flag: "\u{1F1FA}\u{1F1FF}", name: "Uzbekistan" },
+      { flag: "\u{1F1E8}\u{1F1F4}", name: "Colombia" }
+    ],
+    L: [
+      { flag: "\u{1F3F4}\u{E0067}\u{E0062}\u{E0065}\u{E006E}\u{E0067}\u{E007F}", name: "England" },
+      { flag: "\u{1F1ED}\u{1F1F7}", name: "Croatia" },
+      { flag: "\u{1F1EC}\u{1F1ED}", name: "Ghana" },
+      { flag: "\u{1F1F5}\u{1F1E6}", name: "Panama" }
+    ]
+  };
   function getFlagForTeam(name) {
     for (const teams of Object.values(GROUPS_DATA)) {
       const t = teams.find((t2) => t2.name === name);
@@ -1474,7 +1545,7 @@
     const isBracket = tab === "bracket";
     const isSchedule = tab === "schedule";
     const isLeaderboard = tab === "leaderboard";
-    const loaded = state.bracketLoaded;
+    const loaded = state.bracketLoaded || state.isViewing;
     document.getElementById("bracket-content").style.display = isBracket && loaded ? "block" : "none";
     document.getElementById("pre-login-placeholder").style.display = isBracket && !loaded ? "flex" : "none";
     document.getElementById("schedule-panel").style.display = isSchedule ? "block" : "none";
