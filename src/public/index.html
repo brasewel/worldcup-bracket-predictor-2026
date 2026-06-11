@@ -74,7 +74,8 @@
       <button class="tab-btn tab-active" id="tab-bracket" data-tab="bracket">🏆 Bracket</button>
       <button class="tab-btn" id="tab-schedule" data-tab="schedule">📅 Schedule</button>
       <button class="tab-btn" id="tab-leaderboard" data-tab="leaderboard">🥇 Leaderboard</button>
-      <button class="tab-btn" id="tab-live-bracket" data-tab="live-bracket">🔴 Live</button>
+      <button class="tab-btn" id="tab-live" data-tab="live">🔴 Live</button>
+      <button class="tab-btn" id="tab-live-bracket" data-tab="live-bracket">🏅 Results</button>
     </div>
 
     <!-- Live score ticker -->
@@ -279,7 +280,11 @@
   <div id="schedule-days"></div>
 </div>
 
-<!-- Live Bracket panel -->
+<!-- Live Today panel -->
+<div id="live-panel" style="display:none;padding:12px 0">
+</div>
+
+<!-- Results (knockout bracket) panel -->
 <div id="live-bracket-panel" style="display:none">
   <div style="text-align:center;padding:12px 0 4px;color:var(--grey);font-size:0.78rem">
     Showing real match results · auto-refreshes every 60s

@@ -163,10 +163,10 @@ export async function syncMatchResults(env: Env): Promise<void> {
     await env.DB.batch(eventStmts.slice(i, i + 20));
   }
 
-  // Sync per-goal scorer data (including assist) for finished matches
+  // Sync per-goal scorer data (including assist) for finished and live matches
   const goalStmts: D1PreparedStatement[] = [];
   for (const m of data.matches) {
-    if (m.status !== 'FINISHED' || !m.goals?.length) continue;
+    if (!m.goals?.length) continue;
     const matchNum = FD_MATCH_IDS.indexOf(m.id) + 1;
     if (matchNum === 0) continue;
     for (const g of m.goals) {
@@ -188,10 +188,10 @@ export async function syncMatchResults(env: Env): Promise<void> {
     await env.DB.batch(goalStmts.slice(i, i + 20));
   }
 
-  // Sync card (booking) data for finished matches
+  // Sync card (booking) data for finished and live matches
   const cardStmts: D1PreparedStatement[] = [];
   for (const m of data.matches) {
-    if (m.status !== 'FINISHED' || !m.bookings?.length) continue;
+    if (!m.bookings?.length) continue;
     const matchNum = FD_MATCH_IDS.indexOf(m.id) + 1;
     if (matchNum === 0) continue;
     for (const b of m.bookings) {

@@ -18,6 +18,7 @@ import {
 } from './leaderboard';
 import { loadLiveResults } from './liveResults';
 import { renderLiveBracket, startLiveBracketPolling, stopLiveBracketPolling } from './liveBracket';
+import { renderLiveToday, startLiveTodayPolling, stopLiveTodayPolling } from './liveToday';
 import {
   gbCurrentPick, setGbCurrentPick, filterGbPlayers, selectGbPlayer, updateGbDisplay,
 } from './goldenBoot';
@@ -518,6 +519,7 @@ function switchTab(tab: string): void {
   const isBracket = tab === 'bracket';
   const isSchedule = tab === 'schedule';
   const isLeaderboard = tab === 'leaderboard';
+  const isLive = tab === 'live';
   const isLiveBracket = tab === 'live-bracket';
   const loaded = state.bracketLoaded || state.isViewing;
 
@@ -525,11 +527,13 @@ function switchTab(tab: string): void {
   document.getElementById('pre-login-placeholder')!.style.display = (isBracket && !loaded) ? 'flex' : 'none';
   document.getElementById('schedule-panel')!.style.display = isSchedule ? 'block' : 'none';
   document.getElementById('leaderboard-panel')!.style.display = isLeaderboard ? 'block' : 'none';
+  document.getElementById('live-panel')!.style.display = isLive ? 'block' : 'none';
   document.getElementById('live-bracket-panel')!.style.display = isLiveBracket ? 'block' : 'none';
 
   document.getElementById('tab-bracket')!.classList.toggle('tab-active', isBracket);
   document.getElementById('tab-schedule')!.classList.toggle('tab-active', isSchedule);
   document.getElementById('tab-leaderboard')!.classList.toggle('tab-active', isLeaderboard);
+  document.getElementById('tab-live')!.classList.toggle('tab-active', isLive);
   document.getElementById('tab-live-bracket')!.classList.toggle('tab-active', isLiveBracket);
 
   if (isSchedule) {
@@ -546,6 +550,11 @@ function switchTab(tab: string): void {
     startLeaderboard();
   } else {
     stopLeaderboard();
+  }
+  if (isLive) {
+    startLiveTodayPolling();
+  } else {
+    stopLiveTodayPolling();
   }
   if (isLiveBracket) {
     startLiveBracketPolling();
@@ -648,6 +657,9 @@ window.__app = {
   makeMatchPick,
   submitScorePick,
   toggleMatchDetail,
+
+  // live today
+  renderLiveToday,
 
   // leaderboard
   fetchLeaderboard,

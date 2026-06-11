@@ -1772,6 +1772,90 @@
     }
   }
 
+  // src/client/liveToday.ts
+  function buildLiveTodayCard(matchNum) {
+    const m = SCHEDULE.find((x) => x[0] === matchNum);
+    if (!m) return "";
+    const [, dateStr, timeET, t1raw, t2raw, , venue, city] = m;
+    const live = getLiveTeams(matchNum);
+    const t1 = live ? live.home ?? t1raw : t1raw;
+    const t2 = live ? live.away ?? t2raw : t2raw;
+    const f1 = getFlagForTeam(t1 ?? "");
+    const f2 = getFlagForTeam(t2 ?? "");
+    const status = live ? live.status : "TIMED";
+    const isLive = status === "IN_PLAY" || status === "PAUSED" || status === "HALFTIME";
+    const isFinished = status === "FINISHED";
+    const kickoffUtcMs = SCHEDULE_UTC_MS[matchNum];
+    const isStarted = kickoffUtcMs ? Date.now() >= kickoffUtcMs : false;
+    let statusBadgeHtml;
+    if (isLive) {
+      let clockStr = "";
+      if (live && live.matchMinute !== null) {
+        clockStr = live.matchInjury ? ` ${live.matchMinute}+${live.matchInjury}'` : ` ${live.matchMinute}'`;
+      }
+      statusBadgeHtml = `<span class="live-today-status live-today-status--live"><span class="live-dot"></span> LIVE${escHtml(clockStr)}</span>`;
+    } else if (isFinished) {
+      statusBadgeHtml = `<span class="live-today-status live-today-status--finished">Full time</span>`;
+    } else if (isStarted) {
+      statusBadgeHtml = `<span class="live-today-status live-today-status--pending">In progress</span>`;
+    } else {
+      statusBadgeHtml = `<span class="live-today-status live-today-status--upcoming">${formatMatchTime(dateStr, timeET)} ET</span>`;
+    }
+    const hasScore = live && live.homeScore !== null && live.awayScore !== null;
+    const scoreHtml = hasScore ? `<div class="live-today-score">${live.homeScore}<span class="live-today-score-sep">\u2013</span>${live.awayScore}</div>` : `<div class="live-today-score live-today-score--pending">vs</div>`;
+    const homeWon = isFinished && hasScore && live.homeScore > live.awayScore;
+    const awayWon = isFinished && hasScore && live.awayScore > live.homeScore;
+    const teamsHtml = `
+    <div class="live-today-teams">
+      <div class="live-today-team${homeWon ? " live-today-team--winner" : ""}">
+        <span class="live-today-flag">${f1}</span>
+        <span class="live-today-name">${escHtml(t1 ?? "TBD")}</span>
+      </div>
+      ${scoreHtml}
+      <div class="live-today-team${awayWon ? " live-today-team--winner" : ""}">
+        <span class="live-today-flag">${f2}</span>
+        <span class="live-today-name">${escHtml(t2 ?? "TBD")}</span>
+      </div>
+    </div>`;
+    const detailTrigger = isLive || isFinished ? `<button class="btn-match-detail" onclick="event.stopPropagation();window.__app.toggleMatchDetail(${matchNum})">${isFinished ? "\u{1F4CB} Match summary" : "\u{1F534} Live updates"}</button>
+       <div id="match-detail-${matchNum}" class="match-detail-panel" style="display:none"></div>` : "";
+    return `<div class="live-today-card" onclick="${isLive || isFinished ? `window.__app.toggleMatchDetail(${matchNum})` : ""}">
+    <div class="live-today-card-header">
+      ${statusBadgeHtml}
+      <span class="live-today-venue">${escHtml(venue)}, ${escHtml(city)}</span>
+    </div>
+    ${teamsHtml}
+    ${detailTrigger}
+  </div>`;
+  }
+  function renderLiveToday() {
+    const container = document.getElementById("live-panel");
+    if (!container) return;
+    const todayStr = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+    const todayMatches = SCHEDULE.filter((m) => m[1] === todayStr);
+    if (!todayMatches.length) {
+      container.innerHTML = `<div class="live-today-empty">No matches scheduled today. Check the <button class="link-btn" onclick="window.__app.switchTabPublic('schedule')">Schedule</button> tab for upcoming fixtures.</div>`;
+      return;
+    }
+    const cards = todayMatches.map((m) => buildLiveTodayCard(m[0])).join("");
+    container.innerHTML = `<div class="live-today-list">${cards}</div>`;
+  }
+  var liveTodayTimer;
+  function startLiveTodayPolling() {
+    if (liveTodayTimer) return;
+    loadLiveResults().then(() => renderLiveToday());
+    liveTodayTimer = setInterval(async () => {
+      await loadLiveResults();
+      renderLiveToday();
+    }, 60 * 1e3);
+  }
+  function stopLiveTodayPolling() {
+    if (liveTodayTimer) {
+      clearInterval(liveTodayTimer);
+      liveTodayTimer = void 0;
+    }
+  }
+
   // src/client/main.ts
   var deadlineWarningDismissed = false;
   var deadlinePassedHandled = false;
@@ -2208,16 +2292,19 @@
     const isBracket = tab === "bracket";
     const isSchedule = tab === "schedule";
     const isLeaderboard = tab === "leaderboard";
+    const isLive = tab === "live";
     const isLiveBracket = tab === "live-bracket";
     const loaded = state.bracketLoaded || state.isViewing;
     document.getElementById("bracket-content").style.display = isBracket && loaded ? "block" : "none";
     document.getElementById("pre-login-placeholder").style.display = isBracket && !loaded ? "flex" : "none";
     document.getElementById("schedule-panel").style.display = isSchedule ? "block" : "none";
     document.getElementById("leaderboard-panel").style.display = isLeaderboard ? "block" : "none";
+    document.getElementById("live-panel").style.display = isLive ? "block" : "none";
     document.getElementById("live-bracket-panel").style.display = isLiveBracket ? "block" : "none";
     document.getElementById("tab-bracket").classList.toggle("tab-active", isBracket);
     document.getElementById("tab-schedule").classList.toggle("tab-active", isSchedule);
     document.getElementById("tab-leaderboard").classList.toggle("tab-active", isLeaderboard);
+    document.getElementById("tab-live").classList.toggle("tab-active", isLive);
     document.getElementById("tab-live-bracket").classList.toggle("tab-active", isLiveBracket);
     if (isSchedule) {
       renderSchedule();
@@ -2233,6 +2320,11 @@
       startLeaderboard();
     } else {
       stopLeaderboard();
+    }
+    if (isLive) {
+      startLiveTodayPolling();
+    } else {
+      stopLiveTodayPolling();
     }
     if (isLiveBracket) {
       startLiveBracketPolling();
@@ -2314,6 +2406,8 @@
     makeMatchPick,
     submitScorePick,
     toggleMatchDetail,
+    // live today
+    renderLiveToday,
     // leaderboard
     fetchLeaderboard,
     openH2H,

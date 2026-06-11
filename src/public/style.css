@@ -1104,6 +1104,131 @@ body {
 .lb-vs { font-size: 0.58rem; color: var(--grey); text-align: center; line-height: 1; }
 .lb-match-num { font-size: 0.55rem; color: var(--grey); opacity: 0.6; }
 
+/* ── Live Today tab ── */
+.live-today-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 4px 0 16px;
+}
+.live-today-card {
+  background: var(--navy2);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 18px;
+  cursor: pointer;
+  transition: border-color 0.2s, transform 0.15s, box-shadow 0.15s;
+}
+.live-today-card:hover {
+  border-left-color: var(--gold);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+}
+.live-today-card:has(.live-today-status--live) {
+  border-left-color: #ef4444;
+}
+.live-today-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.live-today-status {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  padding: 3px 8px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.live-today-status--live {
+  background: rgba(239,68,68,0.15);
+  color: #f87171;
+  border: 1px solid rgba(239,68,68,0.35);
+}
+.live-today-status--finished {
+  background: rgba(245,197,24,0.1);
+  color: var(--gold);
+  border: 1px solid rgba(245,197,24,0.25);
+}
+.live-today-status--upcoming {
+  background: rgba(255,255,255,0.06);
+  color: var(--grey);
+  border: 1px solid var(--border);
+}
+.live-today-status--pending {
+  background: rgba(255,255,255,0.06);
+  color: var(--grey);
+  border: 1px solid var(--border);
+}
+.live-today-venue {
+  font-size: 0.68rem;
+  color: var(--grey);
+}
+.live-today-teams {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.live-today-team {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+.live-today-team:last-child {
+  flex-direction: row-reverse;
+  text-align: right;
+}
+.live-today-team--winner .live-today-name {
+  color: var(--gold);
+  font-weight: 800;
+}
+.live-today-flag { font-size: 1.6rem; flex-shrink: 0; }
+.live-today-name {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--white);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.live-today-score {
+  font-size: 2rem;
+  font-weight: 900;
+  color: var(--gold);
+  white-space: nowrap;
+  flex-shrink: 0;
+  text-align: center;
+  min-width: 64px;
+}
+.live-today-score--pending {
+  font-size: 1.1rem;
+  color: var(--grey);
+  font-weight: 400;
+}
+.live-today-score-sep { margin: 0 3px; }
+.live-today-empty {
+  color: var(--grey);
+  font-size: 0.85rem;
+  text-align: center;
+  padding: 40px 20px;
+}
+.live-today-empty .link-btn {
+  background: none;
+  border: none;
+  color: var(--gold);
+  cursor: pointer;
+  font-size: inherit;
+  text-decoration: underline;
+  padding: 0;
+}
+
 /* ── Small phones (≤420px) ── */
 @media (max-width: 420px) {
   .header-titles h1 { font-size: 0.95rem; }
