@@ -59,9 +59,19 @@ export async function fetchLeaderboard(): Promise<void> {
     ]);
     lbData = lb;
     renderLeaderboard();
-    renderScoreGraph();
-    if (consensus) renderConsensusInsights(consensus);
-    if (consensus && resultsData) checkForUpsets(consensus, resultsData.results);
+    // Only show match-result-dependent features once at least one match has finished
+    if (lb.has_any_finished) {
+      renderScoreGraph();
+      if (consensus) renderConsensusInsights(consensus);
+      if (consensus && resultsData) checkForUpsets(consensus, resultsData.results);
+    } else {
+      const sg = document.getElementById('score-graph-container');
+      const ci = document.getElementById('consensus-insights-container');
+      const ua = document.getElementById('upset-alert-container');
+      if (sg) sg.innerHTML = '';
+      if (ci) ci.innerHTML = '';
+      if (ua) ua.innerHTML = '';
+    }
   } catch {
     document.getElementById('leaderboard-content')!.innerHTML =
       '<div class="lb-empty">Could not load leaderboard. Try again shortly.</div>';
