@@ -1,6 +1,6 @@
-import { state, isReadOnly, DEADLINE } from './state';
+import { state, isReadOnly, DEADLINE, lastSavedAt } from './state';
 import { GROUPS_DATA, R32_SEEDS, ROUND_COUNTS, getFlagForTeam } from './data';
-import { escHtml, escJs } from './utils';
+import { escHtml, escJs, timeAgo } from './utils';
 import { getConsensusBadge } from './consensus';
 
 export function getGroupTeam(group: string, pos: number): string | null {
@@ -255,10 +255,15 @@ export function renderSaveBar(): void {
       ? `You still have ${missingCount} pick${missingCount > 1 ? 's' : ''} remaining`
       : 'Complete your bracket first';
 
+  const savedAgo = lastSavedAt
+    ? `<div style="font-size:0.72rem;color:var(--grey);text-align:center;margin-top:6px">Last saved ${timeAgo(lastSavedAt)}</div>`
+    : '';
+
   bar.innerHTML = `
     <button class="auto-btn" id="btn-auto" ${hasUser ? '' : 'disabled'} title="Randomly fill all remaining picks">\uD83C\uDFB2 Auto-Pick</button>
     <button class="save-main-btn" id="btn-save" ${hasUser ? '' : 'disabled'}>\uD83D\uDCBE Save Draft</button>
     <button class="confirm-btn" id="btn-confirm" ${allDone ? '' : 'disabled'} title="${escHtml(confirmTitle)}">${allDone ? '\u2705' : '\uD83D\uDD12'} Confirm &amp; Lock</button>
+    ${savedAgo}
   `;
 
   document.getElementById('btn-auto')?.addEventListener('click', () => {

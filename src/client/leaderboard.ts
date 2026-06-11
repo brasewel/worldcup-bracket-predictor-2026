@@ -64,6 +64,11 @@ export async function fetchLeaderboard(): Promise<void> {
       renderScoreGraph();
       if (consensus) renderConsensusInsights(consensus);
       if (consensus && resultsData) checkForUpsets(consensus, resultsData.results);
+      // Show Hall of Fame when the Final (match 104) is finished
+      if (resultsData) {
+        const finalMatch = resultsData.results.find(r => r.match_num === 104 && r.status === 'FINISHED');
+        if (finalMatch) renderHallOfFame();
+      }
     } else {
       const sg = document.getElementById('score-graph-container');
       const ci = document.getElementById('consensus-insights-container');
@@ -532,6 +537,54 @@ export function dismissUpset(matchNum: number): void {
   sessionStorage.setItem('wc26_upsets_dismissed', JSON.stringify(dismissed));
   const el = document.querySelector(`.upset-alert[data-match="${matchNum}"]`);
   if (el) el.remove();
+}
+
+// ── Hall of Fame (post-tournament) ────────────────────────────────────────────
+
+export function renderHallOfFame(): void {
+  if (!lbData || !lbData.leaderboard.length) return;
+  const hof = document.getElementById('hof-container');
+  if (!hof) return;
+
+  const winner = lbData.leaderboard[0];
+  const podium = lbData.leaderboard.slice(0, 3);
+  const champion = winner.picks.find(p => p.round === 'final' && p.correct);
+  const champTeam = champion ? champion.predicted : winner.picks.find(p => p.round === 'final')?.predicted ?? '?';
+
+  const podiumHtml = podium.map((e, i) => {
+    const medal = i === 0 ? '\uD83E\uDD47' : i === 1 ? '\uD83E\uDD48' : '\uD83E\uDD49';
+    const isMe = e.email === state.email;
+    return `<div class="hof-podium-item hof-podium-${i + 1}">
+      <div class="hof-medal">${medal}</div>
+      <div class="hof-podium-name">${escHtml(e.display_name)}${isMe ? ' <span class="lb-you-badge">YOU</span>' : ''}</div>
+      <div class="hof-podium-score">${e.score} pts</div>
+      <div class="hof-podium-detail">${e.correct_knockout} correct picks</div>
+    </div>`;
+  }).join('');
+
+  hof.innerHTML = `
+    <div class="hof-card">
+      <div class="hof-header">
+        <div class="hof-trophy">🏆</div>
+        <div>
+          <div class="hof-title">Hall of Fame</div>
+          <div class="hof-subtitle">FIFA World Cup 2026 — Final Standings</div>
+        </div>
+      </div>
+      <div class="hof-champion">
+        <div class="hof-champion-label">Tournament Winner</div>
+        <div class="hof-champion-name">${escHtml(winner.display_name)}</div>
+        <div class="hof-champion-stats">
+          ${escHtml(String(winner.score))} pts
+          ${champTeam !== '?' ? ' \u00b7 Picked \uD83C\uDFC6 ' + escHtml(getFlagForTeam(champTeam)) + ' ' + escHtml(champTeam) : ''}
+          ${lbData.actual_top_scorer ? ' \u00b7 \u26BD ' + (winner.golden_boot_score > 0 ? '\u2705 GB correct!' : escHtml(lbData.actual_top_scorer) + ' top scorer') : ''}
+        </div>
+      </div>
+      <div class="hof-podium">${podiumHtml}</div>
+      <div class="hof-actions">
+        <button class="lb-refresh-btn" onclick="window.__app.copyStandings()" style="padding:10px 20px;font-size:0.85rem">\uD83D\uDCCB Copy final standings</button>
+      </div>
+    </div>`;
 }
 
 export function copyStandings(): void {

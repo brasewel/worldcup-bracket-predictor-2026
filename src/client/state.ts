@@ -36,6 +36,9 @@ export function resetGroupsToDefault(): void {
 // Initialise groups from defaults on load
 resetGroupsToDefault();
 
+export let lastSavedAt: number | null = null;
+export function setLastSavedAt(ts: number | null): void { lastSavedAt = ts; }
+
 export function isPastDeadline(): boolean {
   return Date.now() >= DEADLINE;
 }

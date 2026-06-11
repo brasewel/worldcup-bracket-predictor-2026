@@ -1,4 +1,4 @@
-import { state, isPastDeadline, isReadOnly, resetGroupsToDefault, DEADLINE } from './state';
+import { state, isPastDeadline, isReadOnly, resetGroupsToDefault, DEADLINE, setLastSavedAt } from './state';
 import { GROUPS_DATA } from './data';
 import { apiFetch, apiBracketList, apiBracketGet, apiBracketSave, BracketListItem } from './api';
 import { escHtml, escJs, timeAgo, showToast } from './utils';
@@ -10,7 +10,7 @@ import {
 } from './bracket';
 import { renderTicker } from './ticker';
 import { loadConsensus } from './consensus';
-import { renderSchedule, makeMatchPick, submitScorePick, toggleMatchDetail } from './schedule';
+import { renderSchedule, makeMatchPick, submitScorePick, toggleMatchDetail, clearScheduleCache, startSchedulePolling, stopSchedulePolling } from './schedule';
 import {
   fetchLeaderboard, startLeaderboard, stopLeaderboard,
   renderLeaderboard, openH2H, closeH2H, copyStandings, lbData,
@@ -18,12 +18,13 @@ import {
 } from './leaderboard';
 import { loadLiveResults } from './liveResults';
 import {
-  gbCurrentPick, filterGbPlayers, selectGbPlayer, updateGbDisplay,
+  gbCurrentPick, setGbCurrentPick, filterGbPlayers, selectGbPlayer, updateGbDisplay,
 } from './goldenBoot';
 
 // ── Countdown ────────────────────────────────────────────────────────────────
 
 let deadlineWarningDismissed = false;
+let deadlinePassedHandled = false;
 
 function updateCountdown(): void {
   const el = document.getElementById('countdown-text')!;
@@ -33,8 +34,18 @@ function updateCountdown(): void {
     header.classList.add('locked');
     document.getElementById('global-lock-banner')!.classList.add('show');
     document.getElementById('deadline-warning-banner')!.style.display = 'none';
+    // Update gate deadline line text once tournament has started
+    const gateLine = document.getElementById('gate-deadline-line');
+    if (gateLine) gateLine.textContent = '\uD83D\uDD12 Picks are closed \u2014 tournament is live!';
     renderSaveBar();
     renderPlaceholder();
+    // First time we detect the deadline passing while the tab is open
+    if (!deadlinePassedHandled) {
+      deadlinePassedHandled = true;
+      renderAll();
+      loadPredictionsList();
+      showToast('\uD83D\uDD12 Picks are now closed! You can now see everyone\u2019s brackets.', 'success');
+    }
     return;
   }
   const diff = DEADLINE - Date.now();
@@ -48,8 +59,19 @@ function updateCountdown(): void {
 function renderDeadlineWarning(diffMs: number): void {
   const banner = document.getElementById('deadline-warning-banner')!;
   const twoHours = 2 * 60 * 60 * 1000;
+  const thirtyMin = 30 * 60 * 1000;
   if (!deadlineWarningDismissed && diffMs > 0 && diffMs < twoHours && state.bracketLoaded && !state.locked && !state.isViewing) {
     banner.style.display = 'flex';
+    if (diffMs < thirtyMin) {
+      const minLeft = Math.ceil(diffMs / 60000);
+      const textEl = banner.querySelector('span');
+      if (textEl) textEl.textContent = '\u26a0\uFE0F Only ' + minLeft + ' min left \u2014 your bracket isn\u2019t locked yet!';
+      banner.classList.add('deadline-warning--urgent');
+    } else {
+      const textEl = banner.querySelector('span');
+      if (textEl) textEl.textContent = '\u26a0\uFE0F Under 2 hours left \u2014 your bracket isn\u2019t locked yet!';
+      banner.classList.remove('deadline-warning--urgent');
+    }
   } else {
     banner.style.display = 'none';
   }
@@ -86,6 +108,8 @@ function renderPlaceholder(): void {
 
 // ── Predictions list ─────────────────────────────────────────────────────────
 
+let bracketListCache: BracketListItem[] = [];
+
 async function loadPredictionsList(): Promise<void> {
   try {
     const brackets = await apiBracketList();
@@ -94,18 +118,19 @@ async function loadPredictionsList(): Promise<void> {
 }
 
 function renderPredictionsList(brackets: BracketListItem[]): void {
+  bracketListCache = brackets;
   const el = document.getElementById('predictions-list')!;
   if (!brackets.length) {
     el.innerHTML = '<div style="color:var(--grey);font-size:0.8rem;">No predictions yet. Be first!</div>';
     return;
   }
-  el.innerHTML = brackets.map(b => {
+  el.innerHTML = brackets.map((b, idx) => {
     const ago = timeAgo(b.updated_at);
     const avatar = (b.display_name || '?')[0].toUpperCase();
     const isLocked = !!b.locked;
     const canView = isPastDeadline() || b.email === state.email;
     const itemStyle = canView ? '' : ' style="cursor:default;opacity:0.85"';
-    return `<div class="prediction-item" data-email="${escHtml(b.email)}"${itemStyle} onclick="window.__app.viewBracket('${escJs(b.email)}','${escJs(b.display_name)}')">
+    return `<div class="prediction-item" data-idx="${idx}"${itemStyle} onclick="window.__app.viewBracket(${idx},'${escJs(b.display_name)}')">
       <div class="prediction-avatar">${escHtml(avatar)}</div>
       <div class="prediction-info">
         <div class="prediction-name">${escHtml(b.display_name)}</div>
@@ -113,7 +138,7 @@ function renderPredictionsList(brackets: BracketListItem[]): void {
       </div>
       <div style="display:flex;align-items:center;gap:4px">
         ${isLocked ? '<span class="lock-badge locked-personal">\uD83D\uDD12 Locked</span>' : '<span class="lock-badge">Draft</span>'}
-        <button class="admin-delete-btn" title="Delete entry" onclick="event.stopPropagation();window.__app.openAdminDelete('${escJs(b.email)}','${escJs(b.display_name)}')" aria-label="Delete">🗑️</button>
+        <button class="admin-delete-btn" title="Delete entry" onclick="event.stopPropagation();window.__app.openAdminDelete(${idx})" aria-label="Delete">\uD83D\uDDD1\uFE0F</button>
       </div>
     </div>`;
   }).join('');
@@ -123,9 +148,11 @@ function renderPredictionsList(brackets: BracketListItem[]): void {
 
 let adminDeleteTarget: { email: string; name: string } | null = null;
 
-function openAdminDelete(email: string, name: string): void {
-  adminDeleteTarget = { email, name };
-  document.getElementById('admin-delete-name')!.textContent = name + ' (' + email + ')';
+function openAdminDelete(idx: number): void {
+  const entry = bracketListCache[idx];
+  if (!entry) return;
+  adminDeleteTarget = { email: entry.email, name: entry.display_name };
+  document.getElementById('admin-delete-name')!.textContent = entry.display_name;
   (document.getElementById('admin-pass-input') as HTMLInputElement).value = '';
   document.getElementById('admin-pass-error')!.style.display = 'none';
   document.getElementById('admin-modal')!.classList.add('open');
@@ -196,6 +223,7 @@ async function handleLoad(): Promise<void> {
   state.bracketLoaded = false;
   state.knockout = {};
   state.predicted3rd = {};
+  clearScheduleCache();
   resetGroupsToDefault();
   document.getElementById('viewing-banner')!.style.display = 'none';
   document.querySelectorAll('.prediction-item').forEach(el => el.classList.remove('active'));
@@ -206,20 +234,26 @@ async function handleLoad(): Promise<void> {
 
   try {
     const data = await apiBracketGet(email);
-    const bd = JSON.parse(data.bracket.bracket_data);
-    if (bd.groups) state.groups = bd.groups;
-    if (bd.knockout) state.knockout = bd.knockout;
-    if (bd.predicted3rd) state.predicted3rd = bd.predicted3rd;
+    let bd: Record<string, unknown> = {};
+    try { bd = JSON.parse(data.bracket.bracket_data); } catch { /* corrupt data — start fresh */ }
+    if (bd.groups) state.groups = bd.groups as Record<string, string[]>;
+    if (bd.knockout) state.knockout = bd.knockout as Record<string, string>;
+    if (bd.predicted3rd) state.predicted3rd = bd.predicted3rd as Record<string, string>;
     state.locked = !!data.bracket.locked;
     state.bracketLoaded = true;
     showToast(state.locked ? '\uD83D\uDD12 Your bracket is locked.' : '\u2705 Bracket loaded!', 'success');
   } catch (e: unknown) {
-    state.bracketLoaded = true;
     const msg = e instanceof Error ? e.message : '';
     if (msg.includes('404') || msg.includes('Not found')) {
+      state.bracketLoaded = true;
       showToast('New bracket started for ' + name + '! Fill in your picks below.', 'success');
     } else {
-      showToast('Could not load bracket: ' + msg, 'error');
+      // Non-404 error: do not show bracket UI to avoid overwriting a real bracket
+      btn.disabled = false;
+      btn.textContent = 'Load / New Bracket';
+      errEl.textContent = 'Could not load bracket: ' + msg;
+      errEl.style.display = 'block';
+      return;
     }
   }
 
@@ -232,7 +266,7 @@ async function handleLoad(): Promise<void> {
   apiFetch<{ player_name: string | null }>('/api/golden-boot?email=' + encodeURIComponent(email))
     .then(d => {
       if (d.player_name) {
-        (window as any).__gb_pick = d.player_name;
+        setGbCurrentPick(d.player_name);
         const inp = document.getElementById('gb-input') as HTMLInputElement;
         if (inp) inp.value = d.player_name;
         updateGbDisplay();
@@ -244,23 +278,34 @@ async function handleLoad(): Promise<void> {
 
 // ── View others ──────────────────────────────────────────────────────────────
 
-async function viewBracket(email: string, displayName: string): Promise<void> {
+// viewBracket accepts either:
+//   - a numeric idx (from predictions list onclick, never exposes email in DOM)
+//   - a raw email string (from ?view= URL param and leaderboard rows)
+async function viewBracket(idxOrEmail: number | string, displayName: string): Promise<void> {
+  const email = (typeof idxOrEmail === 'number'
+    ? bracketListCache[idxOrEmail]?.email ?? ''
+    : idxOrEmail
+  ).toLowerCase();
+
+  if (!email) { showToast('Could not find that bracket', 'error'); return; }
+
   // Only allow viewing your own bracket before the deadline
   if (!isPastDeadline() && email !== state.email) {
-    showToast('🔒 Brackets are hidden until picks close at 5 PM ET today.', 'error');
+    showToast('\uD83D\uDD12 Brackets are hidden until picks close at 5 PM ET today.', 'error');
     return;
   }
   try {
     const data = await apiBracketGet(email);
-    const bd = JSON.parse(data.bracket.bracket_data);
+    let bd: Record<string, unknown> = {};
+    try { bd = JSON.parse(data.bracket.bracket_data); } catch { /* corrupt data — show defaults */ }
     state.isViewing = true;
     state.viewingName = displayName;
     state.groups = Object.keys(GROUPS_DATA).reduce<Record<string, string[]>>((acc, g) => {
-      acc[g] = bd.groups?.[g] ?? GROUPS_DATA[g].map(t => t.name);
+      acc[g] = (bd.groups as Record<string, string[]>)?.[g] ?? GROUPS_DATA[g].map(t => t.name);
       return acc;
     }, {});
-    state.knockout = bd.knockout ?? {};
-    state.predicted3rd = bd.predicted3rd ?? {};
+    state.knockout = (bd.knockout as Record<string, string>) ?? {};
+    state.predicted3rd = (bd.predicted3rd as Record<string, string>) ?? {};
     state.locked = !!data.bracket.locked;
 
     document.getElementById('viewing-banner')!.style.display = 'flex';
@@ -269,9 +314,14 @@ async function viewBracket(email: string, displayName: string): Promise<void> {
     const shareBtnEl = document.getElementById('btn-share-bracket');
     if (shareBtnEl) shareBtnEl.setAttribute('data-share-email', email);
 
+    // Highlight active prediction item by idx (no email in DOM)
     document.querySelectorAll('.prediction-item').forEach(el => el.classList.remove('active'));
-    const match = Array.from(document.querySelectorAll<HTMLElement>('.prediction-item')).find(el => el.dataset.email === email);
-    if (match) match.classList.add('active');
+    if (typeof idxOrEmail === 'number') {
+      document.querySelector<HTMLElement>(`.prediction-item[data-idx="${idxOrEmail}"]`)?.classList.add('active');
+    } else {
+      const idx = bracketListCache.findIndex(b => b.email.toLowerCase() === email);
+      if (idx !== -1) document.querySelector<HTMLElement>(`.prediction-item[data-idx="${idx}"]`)?.classList.add('active');
+    }
 
     showBracketContent();
     renderAll();
@@ -293,10 +343,11 @@ function stopViewing(): void {
 
   if (state.email && state.bracketLoaded) {
     apiBracketGet(state.email).then(data => {
-      const bd = JSON.parse(data.bracket.bracket_data);
-      if (bd.groups) state.groups = bd.groups;
-      if (bd.knockout) state.knockout = bd.knockout;
-      if (bd.predicted3rd) state.predicted3rd = bd.predicted3rd;
+      let bd: Record<string, unknown> = {};
+      try { bd = JSON.parse(data.bracket.bracket_data); } catch { /* corrupt — keep defaults */ }
+      if (bd.groups) state.groups = bd.groups as Record<string, string[]>;
+      if (bd.knockout) state.knockout = bd.knockout as Record<string, string>;
+      if (bd.predicted3rd) state.predicted3rd = bd.predicted3rd as Record<string, string>;
       state.locked = !!data.bracket.locked;
       renderAll();
     }).catch(() => {
@@ -341,6 +392,7 @@ async function handleSave(): Promise<void> {
       JSON.stringify({ groups: state.groups, knockout: state.knockout, predicted3rd: state.predicted3rd }),
       false,
     );
+    setLastSavedAt(Date.now());
     showToast('\u2705 Draft saved!', 'success');
     loadPredictionsList();
   } catch (e: unknown) {
@@ -399,6 +451,18 @@ function shareMyBracket(): void {
   }
 }
 
+function copyInviteMessage(): void {
+  const msg = '\uD83C\uDFC6 FIFA 2026 Bracket Pool \u2014 join before 5 PM ET today!\n' +
+    location.origin + location.pathname + '\nPassword: sofluffy';
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(msg)
+      .then(() => showToast('\uD83D\uDCCB Invite message copied! Paste it into WhatsApp.', 'success'))
+      .catch(() => prompt('Copy this invite message:', msg));
+  } else {
+    prompt('Copy this invite message:', msg);
+  }
+}
+
 function scrollToSidebar(): void {
   const sidebar = document.querySelector('.sidebar');
   if (sidebar) sidebar.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -427,10 +491,13 @@ function switchTab(tab: string): void {
 
   if (isSchedule) {
     renderSchedule();
+    startSchedulePolling();
     setTimeout(() => {
       const el = document.getElementById('today-anchor');
       if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 80);
+  } else {
+    stopSchedulePolling();
   }
   if (isLeaderboard) {
     startLeaderboard();
@@ -526,6 +593,7 @@ window.__app = {
   scrollToSaveBar,
   dismissDeadlineWarning,
   shareMyBracket,
+  copyInviteMessage,
 
   // schedule
   makeMatchPick,

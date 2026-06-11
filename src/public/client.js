@@ -270,6 +270,10 @@
     });
   }
   resetGroupsToDefault();
+  var lastSavedAt = null;
+  function setLastSavedAt(ts) {
+    lastSavedAt = ts;
+  }
   function isPastDeadline() {
     return Date.now() >= DEADLINE;
   }
@@ -362,6 +366,7 @@
     order.splice(newIdx, 0, name);
     state.groups[group] = order;
     state.knockout = {};
+    state.predicted3rd = {};
     window.__app.renderAll();
   }
   function setupMouseDrag() {
@@ -395,6 +400,7 @@
         order.splice(toIdx, 0, dragSrc.dataset.team);
         state.groups[group] = order;
         state.knockout = {};
+        state.predicted3rd = {};
         window.__app.renderAll();
       });
     });
@@ -635,10 +641,12 @@
     const allDone = hasUser && isBracketComplete();
     const missingCount = hasUser ? countMissingPicks() : 0;
     const confirmTitle = allDone ? "" : missingCount > 0 ? `You still have ${missingCount} pick${missingCount > 1 ? "s" : ""} remaining` : "Complete your bracket first";
+    const savedAgo = lastSavedAt ? `<div style="font-size:0.72rem;color:var(--grey);text-align:center;margin-top:6px">Last saved ${timeAgo(lastSavedAt)}</div>` : "";
     bar.innerHTML = `
     <button class="auto-btn" id="btn-auto" ${hasUser ? "" : "disabled"} title="Randomly fill all remaining picks">\u{1F3B2} Auto-Pick</button>
     <button class="save-main-btn" id="btn-save" ${hasUser ? "" : "disabled"}>\u{1F4BE} Save Draft</button>
     <button class="confirm-btn" id="btn-confirm" ${allDone ? "" : "disabled"} title="${escHtml(confirmTitle)}">${allDone ? "\u2705" : "\u{1F512}"} Confirm &amp; Lock</button>
+    ${savedAgo}
   `;
     document.getElementById("btn-auto")?.addEventListener("click", () => {
       window.__app.autoPickAll();
@@ -733,6 +741,10 @@
   // src/client/schedule.ts
   var schedulePickCache = {};
   var scorePickCache = {};
+  function clearScheduleCache() {
+    for (const k in schedulePickCache) delete schedulePickCache[k];
+    for (const k in scorePickCache) delete scorePickCache[k];
+  }
   async function loadMatchPick(matchId) {
     if (!state.email) return;
     if (schedulePickCache[matchId] === "loading") return;
@@ -950,6 +962,20 @@
       }
     }
   }
+  var schedulePollTimer;
+  function startSchedulePolling() {
+    if (schedulePollTimer) return;
+    schedulePollTimer = setInterval(async () => {
+      await loadLiveResults();
+      renderSchedule();
+    }, 60 * 1e3);
+  }
+  function stopSchedulePolling() {
+    if (schedulePollTimer) {
+      clearInterval(schedulePollTimer);
+      schedulePollTimer = void 0;
+    }
+  }
   async function toggleMatchDetail(matchId) {
     const panel = document.getElementById("match-detail-" + matchId);
     if (!panel) return;
@@ -1053,6 +1079,9 @@
     "Ricardo Pepi"
   ];
   var gbCurrentPick = null;
+  function setGbCurrentPick(name) {
+    gbCurrentPick = name;
+  }
   function filterGbPlayers(q) {
     const box = document.getElementById("gb-suggestions");
     if (!q.trim()) {
@@ -1121,6 +1150,10 @@
         renderScoreGraph();
         if (consensus) renderConsensusInsights(consensus);
         if (consensus && resultsData) checkForUpsets(consensus, resultsData.results);
+        if (resultsData) {
+          const finalMatch = resultsData.results.find((r) => r.match_num === 104 && r.status === "FINISHED");
+          if (finalMatch) renderHallOfFame();
+        }
       } else {
         const sg = document.getElementById("score-graph-container");
         const ci = document.getElementById("consensus-insights-container");
@@ -1525,6 +1558,48 @@
     const el = document.querySelector(`.upset-alert[data-match="${matchNum}"]`);
     if (el) el.remove();
   }
+  function renderHallOfFame() {
+    if (!lbData || !lbData.leaderboard.length) return;
+    const hof = document.getElementById("hof-container");
+    if (!hof) return;
+    const winner = lbData.leaderboard[0];
+    const podium = lbData.leaderboard.slice(0, 3);
+    const champion = winner.picks.find((p) => p.round === "final" && p.correct);
+    const champTeam = champion ? champion.predicted : winner.picks.find((p) => p.round === "final")?.predicted ?? "?";
+    const podiumHtml = podium.map((e, i) => {
+      const medal = i === 0 ? "\u{1F947}" : i === 1 ? "\u{1F948}" : "\u{1F949}";
+      const isMe = e.email === state.email;
+      return `<div class="hof-podium-item hof-podium-${i + 1}">
+      <div class="hof-medal">${medal}</div>
+      <div class="hof-podium-name">${escHtml(e.display_name)}${isMe ? ' <span class="lb-you-badge">YOU</span>' : ""}</div>
+      <div class="hof-podium-score">${e.score} pts</div>
+      <div class="hof-podium-detail">${e.correct_knockout} correct picks</div>
+    </div>`;
+    }).join("");
+    hof.innerHTML = `
+    <div class="hof-card">
+      <div class="hof-header">
+        <div class="hof-trophy">\u{1F3C6}</div>
+        <div>
+          <div class="hof-title">Hall of Fame</div>
+          <div class="hof-subtitle">FIFA World Cup 2026 \u2014 Final Standings</div>
+        </div>
+      </div>
+      <div class="hof-champion">
+        <div class="hof-champion-label">Tournament Winner</div>
+        <div class="hof-champion-name">${escHtml(winner.display_name)}</div>
+        <div class="hof-champion-stats">
+          ${escHtml(String(winner.score))} pts
+          ${champTeam !== "?" ? " \xB7 Picked \u{1F3C6} " + escHtml(getFlagForTeam(champTeam)) + " " + escHtml(champTeam) : ""}
+          ${lbData.actual_top_scorer ? " \xB7 \u26BD " + (winner.golden_boot_score > 0 ? "\u2705 GB correct!" : escHtml(lbData.actual_top_scorer) + " top scorer") : ""}
+        </div>
+      </div>
+      <div class="hof-podium">${podiumHtml}</div>
+      <div class="hof-actions">
+        <button class="lb-refresh-btn" onclick="window.__app.copyStandings()" style="padding:10px 20px;font-size:0.85rem">\u{1F4CB} Copy final standings</button>
+      </div>
+    </div>`;
+  }
   function copyStandings() {
     if (!lbData || !lbData.leaderboard.length) {
       showToast("No standings yet", "error");
@@ -1552,6 +1627,7 @@
 
   // src/client/main.ts
   var deadlineWarningDismissed = false;
+  var deadlinePassedHandled = false;
   function updateCountdown() {
     const el = document.getElementById("countdown-text");
     const header = document.getElementById("countdown-header");
@@ -1560,8 +1636,16 @@
       header.classList.add("locked");
       document.getElementById("global-lock-banner").classList.add("show");
       document.getElementById("deadline-warning-banner").style.display = "none";
+      const gateLine = document.getElementById("gate-deadline-line");
+      if (gateLine) gateLine.textContent = "\u{1F512} Picks are closed \u2014 tournament is live!";
       renderSaveBar();
       renderPlaceholder();
+      if (!deadlinePassedHandled) {
+        deadlinePassedHandled = true;
+        renderAll();
+        loadPredictionsList();
+        showToast("\u{1F512} Picks are now closed! You can now see everyone\u2019s brackets.", "success");
+      }
       return;
     }
     const diff = DEADLINE - Date.now();
@@ -1574,8 +1658,19 @@
   function renderDeadlineWarning(diffMs) {
     const banner = document.getElementById("deadline-warning-banner");
     const twoHours = 2 * 60 * 60 * 1e3;
+    const thirtyMin = 30 * 60 * 1e3;
     if (!deadlineWarningDismissed && diffMs > 0 && diffMs < twoHours && state.bracketLoaded && !state.locked && !state.isViewing) {
       banner.style.display = "flex";
+      if (diffMs < thirtyMin) {
+        const minLeft = Math.ceil(diffMs / 6e4);
+        const textEl = banner.querySelector("span");
+        if (textEl) textEl.textContent = "\u26A0\uFE0F Only " + minLeft + " min left \u2014 your bracket isn\u2019t locked yet!";
+        banner.classList.add("deadline-warning--urgent");
+      } else {
+        const textEl = banner.querySelector("span");
+        if (textEl) textEl.textContent = "\u26A0\uFE0F Under 2 hours left \u2014 your bracket isn\u2019t locked yet!";
+        banner.classList.remove("deadline-warning--urgent");
+      }
     } else {
       banner.style.display = "none";
     }
@@ -1604,6 +1699,7 @@
       live.style.display = "none";
     }
   }
+  var bracketListCache = [];
   async function loadPredictionsList() {
     try {
       const brackets = await apiBracketList();
@@ -1612,18 +1708,19 @@
     }
   }
   function renderPredictionsList(brackets) {
+    bracketListCache = brackets;
     const el = document.getElementById("predictions-list");
     if (!brackets.length) {
       el.innerHTML = '<div style="color:var(--grey);font-size:0.8rem;">No predictions yet. Be first!</div>';
       return;
     }
-    el.innerHTML = brackets.map((b) => {
+    el.innerHTML = brackets.map((b, idx) => {
       const ago = timeAgo(b.updated_at);
       const avatar = (b.display_name || "?")[0].toUpperCase();
       const isLocked = !!b.locked;
       const canView = isPastDeadline() || b.email === state.email;
       const itemStyle = canView ? "" : ' style="cursor:default;opacity:0.85"';
-      return `<div class="prediction-item" data-email="${escHtml(b.email)}"${itemStyle} onclick="window.__app.viewBracket('${escJs(b.email)}','${escJs(b.display_name)}')">
+      return `<div class="prediction-item" data-idx="${idx}"${itemStyle} onclick="window.__app.viewBracket(${idx},'${escJs(b.display_name)}')">
       <div class="prediction-avatar">${escHtml(avatar)}</div>
       <div class="prediction-info">
         <div class="prediction-name">${escHtml(b.display_name)}</div>
@@ -1631,15 +1728,17 @@
       </div>
       <div style="display:flex;align-items:center;gap:4px">
         ${isLocked ? '<span class="lock-badge locked-personal">\u{1F512} Locked</span>' : '<span class="lock-badge">Draft</span>'}
-        <button class="admin-delete-btn" title="Delete entry" onclick="event.stopPropagation();window.__app.openAdminDelete('${escJs(b.email)}','${escJs(b.display_name)}')" aria-label="Delete">\u{1F5D1}\uFE0F</button>
+        <button class="admin-delete-btn" title="Delete entry" onclick="event.stopPropagation();window.__app.openAdminDelete(${idx})" aria-label="Delete">\u{1F5D1}\uFE0F</button>
       </div>
     </div>`;
     }).join("");
   }
   var adminDeleteTarget = null;
-  function openAdminDelete(email, name) {
-    adminDeleteTarget = { email, name };
-    document.getElementById("admin-delete-name").textContent = name + " (" + email + ")";
+  function openAdminDelete(idx) {
+    const entry = bracketListCache[idx];
+    if (!entry) return;
+    adminDeleteTarget = { email: entry.email, name: entry.display_name };
+    document.getElementById("admin-delete-name").textContent = entry.display_name;
     document.getElementById("admin-pass-input").value = "";
     document.getElementById("admin-pass-error").style.display = "none";
     document.getElementById("admin-modal").classList.add("open");
@@ -1711,6 +1810,7 @@
     state.bracketLoaded = false;
     state.knockout = {};
     state.predicted3rd = {};
+    clearScheduleCache();
     resetGroupsToDefault();
     document.getElementById("viewing-banner").style.display = "none";
     document.querySelectorAll(".prediction-item").forEach((el) => el.classList.remove("active"));
@@ -1719,7 +1819,11 @@
     btn.innerHTML = '<span class="spinner"></span> Loading...';
     try {
       const data = await apiBracketGet(email);
-      const bd = JSON.parse(data.bracket.bracket_data);
+      let bd = {};
+      try {
+        bd = JSON.parse(data.bracket.bracket_data);
+      } catch {
+      }
       if (bd.groups) state.groups = bd.groups;
       if (bd.knockout) state.knockout = bd.knockout;
       if (bd.predicted3rd) state.predicted3rd = bd.predicted3rd;
@@ -1727,12 +1831,16 @@
       state.bracketLoaded = true;
       showToast(state.locked ? "\u{1F512} Your bracket is locked." : "\u2705 Bracket loaded!", "success");
     } catch (e) {
-      state.bracketLoaded = true;
       const msg = e instanceof Error ? e.message : "";
       if (msg.includes("404") || msg.includes("Not found")) {
+        state.bracketLoaded = true;
         showToast("New bracket started for " + name + "! Fill in your picks below.", "success");
       } else {
-        showToast("Could not load bracket: " + msg, "error");
+        btn.disabled = false;
+        btn.textContent = "Load / New Bracket";
+        errEl.textContent = "Could not load bracket: " + msg;
+        errEl.style.display = "block";
+        return;
       }
     }
     btn.disabled = false;
@@ -1742,7 +1850,7 @@
     loadPredictionsList();
     apiFetch("/api/golden-boot?email=" + encodeURIComponent(email)).then((d) => {
       if (d.player_name) {
-        window.__gb_pick = d.player_name;
+        setGbCurrentPick(d.player_name);
         const inp = document.getElementById("gb-input");
         if (inp) inp.value = d.player_name;
         updateGbDisplay();
@@ -1751,14 +1859,23 @@
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
-  async function viewBracket(email, displayName) {
+  async function viewBracket(idxOrEmail, displayName) {
+    const email = (typeof idxOrEmail === "number" ? bracketListCache[idxOrEmail]?.email ?? "" : idxOrEmail).toLowerCase();
+    if (!email) {
+      showToast("Could not find that bracket", "error");
+      return;
+    }
     if (!isPastDeadline() && email !== state.email) {
       showToast("\u{1F512} Brackets are hidden until picks close at 5 PM ET today.", "error");
       return;
     }
     try {
       const data = await apiBracketGet(email);
-      const bd = JSON.parse(data.bracket.bracket_data);
+      let bd = {};
+      try {
+        bd = JSON.parse(data.bracket.bracket_data);
+      } catch {
+      }
       state.isViewing = true;
       state.viewingName = displayName;
       state.groups = Object.keys(GROUPS_DATA).reduce((acc, g) => {
@@ -1773,8 +1890,12 @@
       const shareBtnEl = document.getElementById("btn-share-bracket");
       if (shareBtnEl) shareBtnEl.setAttribute("data-share-email", email);
       document.querySelectorAll(".prediction-item").forEach((el) => el.classList.remove("active"));
-      const match = Array.from(document.querySelectorAll(".prediction-item")).find((el) => el.dataset.email === email);
-      if (match) match.classList.add("active");
+      if (typeof idxOrEmail === "number") {
+        document.querySelector(`.prediction-item[data-idx="${idxOrEmail}"]`)?.classList.add("active");
+      } else {
+        const idx = bracketListCache.findIndex((b) => b.email.toLowerCase() === email);
+        if (idx !== -1) document.querySelector(`.prediction-item[data-idx="${idx}"]`)?.classList.add("active");
+      }
       showBracketContent();
       renderAll();
       switchTab("bracket");
@@ -1793,7 +1914,11 @@
     document.querySelectorAll(".prediction-item").forEach((el) => el.classList.remove("active"));
     if (state.email && state.bracketLoaded) {
       apiBracketGet(state.email).then((data) => {
-        const bd = JSON.parse(data.bracket.bracket_data);
+        let bd = {};
+        try {
+          bd = JSON.parse(data.bracket.bracket_data);
+        } catch {
+        }
         if (bd.groups) state.groups = bd.groups;
         if (bd.knockout) state.knockout = bd.knockout;
         if (bd.predicted3rd) state.predicted3rd = bd.predicted3rd;
@@ -1839,6 +1964,7 @@
         JSON.stringify({ groups: state.groups, knockout: state.knockout, predicted3rd: state.predicted3rd }),
         false
       );
+      setLastSavedAt(Date.now());
       showToast("\u2705 Draft saved!", "success");
       loadPredictionsList();
     } catch (e) {
@@ -1887,6 +2013,14 @@
       prompt("Share this bracket link:", url);
     }
   }
+  function copyInviteMessage() {
+    const msg = "\u{1F3C6} FIFA 2026 Bracket Pool \u2014 join before 5 PM ET today!\n" + location.origin + location.pathname + "\nPassword: sofluffy";
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(msg).then(() => showToast("\u{1F4CB} Invite message copied! Paste it into WhatsApp.", "success")).catch(() => prompt("Copy this invite message:", msg));
+    } else {
+      prompt("Copy this invite message:", msg);
+    }
+  }
   function scrollToSidebar() {
     const sidebar = document.querySelector(".sidebar");
     if (sidebar) sidebar.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1908,10 +2042,13 @@
     document.getElementById("tab-leaderboard").classList.toggle("tab-active", isLeaderboard);
     if (isSchedule) {
       renderSchedule();
+      startSchedulePolling();
       setTimeout(() => {
         const el = document.getElementById("today-anchor");
         if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
       }, 80);
+    } else {
+      stopSchedulePolling();
     }
     if (isLeaderboard) {
       startLeaderboard();
@@ -1988,6 +2125,7 @@
     scrollToSaveBar,
     dismissDeadlineWarning,
     shareMyBracket,
+    copyInviteMessage,
     // schedule
     makeMatchPick,
     submitScorePick,

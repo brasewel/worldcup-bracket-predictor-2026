@@ -7,6 +7,11 @@ import { getLiveTeams, loadLiveResults } from './liveResults';
 const schedulePickCache: Record<number, { picked: string | null; tally: Array<{ team: string; cnt: number }> | null } | 'loading' | null> = {};
 const scorePickCache: Record<string, { myPick: { home_score: number; away_score: number } | null; tally: Array<{ home_score: number; away_score: number; cnt: number }> | null } | 'loading' | null> = {};
 
+export function clearScheduleCache(): void {
+  for (const k in schedulePickCache) delete schedulePickCache[k as unknown as number];
+  for (const k in scorePickCache) delete scorePickCache[k];
+}
+
 export async function loadMatchPick(matchId: number): Promise<void> {
   if (!state.email) return;
   if (schedulePickCache[matchId] === 'loading') return;
@@ -237,6 +242,22 @@ export async function renderSchedule(): Promise<void> {
       }
     }
   }
+}
+
+// ── Schedule auto-refresh ─────────────────────────────────────────────────────
+
+let schedulePollTimer: ReturnType<typeof setInterval> | undefined;
+
+export function startSchedulePolling(): void {
+  if (schedulePollTimer) return; // already running
+  schedulePollTimer = setInterval(async () => {
+    await loadLiveResults();
+    renderSchedule();
+  }, 60 * 1000);
+}
+
+export function stopSchedulePolling(): void {
+  if (schedulePollTimer) { clearInterval(schedulePollTimer); schedulePollTimer = undefined; }
 }
 
 export async function toggleMatchDetail(matchId: number): Promise<void> {

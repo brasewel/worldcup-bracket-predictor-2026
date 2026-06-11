@@ -4,6 +4,7 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>FIFA World Cup 2026 — Bracket Predictor</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚽</text></svg>">
 <link rel="stylesheet" href="/style.css"/>
 </head>
 <body>
@@ -14,6 +15,7 @@
     <div style="font-size:3rem;margin-bottom:12px;">🏆</div>
     <h2 style="color:var(--gold);font-size:1.4rem;font-weight:900;letter-spacing:3px;text-transform:uppercase;margin:0 0 4px;">FIFA World Cup 2026</h2>
     <p style="color:var(--grey);font-size:0.75rem;letter-spacing:2px;text-transform:uppercase;margin:0 0 28px;">Private Group Predictor</p>
+    <p id="gate-deadline-line" style="color:var(--gold);font-size:0.82rem;margin:0 0 12px;font-weight:700;letter-spacing:1px;">⏰ Picks close June 11 at 5 PM ET</p>
     <p style="color:var(--white);font-size:0.9rem;margin:0 0 18px;opacity:0.8;">Enter the group password to access</p>
     <input id="pass-input" type="password" placeholder="Group password" autocomplete="off"
       style="width:100%;box-sizing:border-box;padding:14px 16px;border-radius:10px;border:2px solid var(--border);background:var(--navy3);color:var(--white);font-size:1rem;outline:none;margin-bottom:10px;text-align:center;letter-spacing:4px;" />
@@ -59,6 +61,9 @@
       <div id="predictions-list" class="predictions-list">
         <div style="color:var(--grey);font-size:0.8rem;">Loading...</div>
       </div>
+      <button class="invite-btn" onclick="window.__app.copyInviteMessage()" title="Copy invite message for WhatsApp">
+        📲 Invite friends
+      </button>
     </div>
   </aside>
 
@@ -150,6 +155,10 @@
             <div class="feature-desc">R32 ×2 · R16 ×3 · QF ×4 · SF ×5 · Final ×8 · Group positions ×1 · Exact score ×3 · Golden Boot ×5</div>
           </div>
         </div>
+
+        <div class="mobile-start-nudge" onclick="window.__app.scrollToSidebar()">
+          👉 Tap here to enter your details &amp; start picking
+        </div>
       </div>
       <div class="placeholder-box placeholder-live" id="placeholder-box-live" style="display:none">
         <div class="placeholder-trophy">⚽</div>
@@ -240,6 +249,7 @@
 
 <!-- Leaderboard panel -->
 <div id="leaderboard-panel" style="display:none">
+  <div id="hof-container"></div>
   <div id="upset-alert-container"></div>
   <div id="leaderboard-content"></div>
   <div id="score-graph-container"></div>

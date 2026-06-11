@@ -812,6 +812,16 @@ body {
   font-size: 0.88rem; color: var(--amber);
 }
 .deadline-warning-banner span { flex: 1; min-width: 200px; }
+.deadline-warning--urgent {
+  background: linear-gradient(135deg, rgba(239,68,68,0.22), rgba(239,68,68,0.10)) !important;
+  border-color: var(--red) !important;
+  color: #fca5a5 !important;
+  animation: urgentPulse 1.5s ease-in-out infinite;
+}
+@keyframes urgentPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.4); }
+  50% { box-shadow: 0 0 0 6px rgba(239,68,68,0); }
+}
 .dw-lock-btn {
   background: var(--amber); color: var(--navy); border: none;
   border-radius: 7px; padding: 6px 14px; font-weight: 700;
@@ -900,6 +910,65 @@ body {
 }
 .consensus-bar-pct { font-size: 0.75rem; color: var(--grey); white-space: nowrap; min-width: 40px; text-align: right; }
 .consensus-split-text { font-size: 0.85rem; color: var(--white); line-height: 1.5; }
+
+/* ── Hall of Fame ── */
+.hof-card {
+  background: linear-gradient(135deg, #1a1200, #2a1e00, #1a1200);
+  border: 2px solid var(--gold); border-radius: 16px;
+  padding: 28px 24px; margin: 0 0 24px;
+  box-shadow: 0 0 40px rgba(245,197,24,0.15);
+}
+.hof-header { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; }
+.hof-trophy { font-size: 3rem; filter: drop-shadow(0 0 12px rgba(245,197,24,0.8)); }
+.hof-title { font-size: 1.4rem; font-weight: 900; color: var(--gold); letter-spacing: 2px; text-transform: uppercase; }
+.hof-subtitle { font-size: 0.75rem; color: var(--grey); letter-spacing: 1px; }
+.hof-champion { text-align: center; margin-bottom: 24px; padding: 16px; background: rgba(245,197,24,0.06); border-radius: 12px; }
+.hof-champion-label { font-size: 0.72rem; color: var(--grey); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 6px; }
+.hof-champion-name { font-size: 1.8rem; font-weight: 900; color: var(--gold); margin-bottom: 6px; }
+.hof-champion-stats { font-size: 0.85rem; color: var(--white); opacity: 0.85; }
+.hof-podium { display: flex; gap: 12px; justify-content: center; margin-bottom: 20px; flex-wrap: wrap; }
+.hof-podium-item { text-align: center; padding: 12px 16px; border-radius: 10px; min-width: 100px; background: rgba(255,255,255,0.04); border: 1px solid var(--border); }
+.hof-podium-1 { border-color: var(--gold); background: rgba(245,197,24,0.08); }
+.hof-podium-2 { border-color: #9ca3af; }
+.hof-podium-3 { border-color: #b45309; }
+.hof-medal { font-size: 1.6rem; margin-bottom: 4px; }
+.hof-podium-name { font-size: 0.82rem; font-weight: 700; color: var(--white); margin-bottom: 2px; }
+.hof-podium-score { font-size: 0.95rem; font-weight: 900; color: var(--gold); }
+.hof-podium-detail { font-size: 0.68rem; color: var(--grey); margin-top: 2px; }
+.hof-actions { text-align: center; }
+
+/* ── Invite button ── */
+.invite-btn {
+  width: 100%; margin-top: 10px; padding: 9px 14px;
+  background: linear-gradient(135deg, rgba(245,197,24,0.1), rgba(245,197,24,0.04));
+  border: 1px solid var(--border); border-radius: 8px;
+  color: var(--gold); font-size: 0.8rem; font-weight: 700;
+  cursor: pointer; letter-spacing: 0.5px;
+  transition: background 0.2s;
+}
+.invite-btn:hover { background: rgba(245,197,24,0.18); }
+
+/* ── Mobile start nudge (only visible on small screens, hidden after login) ── */
+.mobile-start-nudge {
+  display: none;
+}
+@media (max-width: 768px) {
+  .mobile-start-nudge {
+    display: block;
+    margin-top: 20px;
+    padding: 14px 20px;
+    background: linear-gradient(135deg, rgba(245,197,24,0.12), rgba(245,197,24,0.05));
+    border: 2px solid var(--gold);
+    border-radius: 12px;
+    color: var(--gold);
+    font-weight: 700;
+    font-size: 0.95rem;
+    text-align: center;
+    cursor: pointer;
+    letter-spacing: 0.5px;
+  }
+  .mobile-start-nudge:hover { background: rgba(245,197,24,0.2); }
+}
 
 /* ── Small phones (≤420px) ── */
 @media (max-width: 420px) {

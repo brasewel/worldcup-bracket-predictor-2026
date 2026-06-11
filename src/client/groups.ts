@@ -45,6 +45,7 @@ export function moveTeam(e: Event, group: string, name: string, dir: number): vo
   order.splice(newIdx, 0, name);
   state.groups[group] = order;
   state.knockout = {};
+  state.predicted3rd = {};
   (window as any).__app.renderAll();
 }
 
@@ -79,6 +80,7 @@ function setupMouseDrag(): void {
       order.splice(toIdx, 0, dragSrc.dataset.team!);
       state.groups[group] = order;
       state.knockout = {};
+      state.predicted3rd = {};
       (window as any).__app.renderAll();
     });
   });

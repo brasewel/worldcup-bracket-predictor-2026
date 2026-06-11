@@ -20,6 +20,10 @@ const GB_PLAYERS = [
 
 export let gbCurrentPick: string | null = null;
 
+export function setGbCurrentPick(name: string | null): void {
+  gbCurrentPick = name;
+}
+
 export function filterGbPlayers(q: string): void {
   const box = document.getElementById('gb-suggestions')!;
   if (!q.trim()) { box.style.display = 'none'; return; }
