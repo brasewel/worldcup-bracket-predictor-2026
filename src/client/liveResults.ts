@@ -10,16 +10,13 @@ interface LiveResultRow {
 }
 
 const liveResults: Record<number, LiveResultRow> = {};
-let liveResultsLoaded = false;
 
 export async function loadLiveResults(): Promise<void> {
-  if (liveResultsLoaded) return;
   try {
     const data = await apiFetch<{ results: LiveResultRow[] }>('/api/match-results');
     for (const row of data.results ?? []) {
       liveResults[row.match_num] = row;
     }
-    liveResultsLoaded = true;
   } catch { /* non-fatal */ }
 }
 

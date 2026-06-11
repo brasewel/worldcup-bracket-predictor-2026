@@ -1,6 +1,14 @@
 import { Env } from '../index';
 import { FD_MATCH_IDS } from '../data/constants';
 
+interface FDGoal {
+  minute: number | null;
+  injuryTime: number | null;
+  type: string; // REGULAR, OWN, PENALTY
+  team: { name: string | null };
+  scorer: { name: string | null } | null;
+}
+
 interface FDMatch {
   id: number;
   status: string;
@@ -11,11 +19,15 @@ interface FDMatch {
   };
   homeTeam: { name: string | null };
   awayTeam: { name: string | null };
+  goals?: FDGoal[];
 }
 
 export async function syncMatchResults(env: Env): Promise<void> {
   const res = await fetch('https://api.football-data.org/v4/competitions/WC/matches?season=2026', {
-    headers: { 'X-Auth-Token': env.FOOTBALL_DATA_TOKEN },
+    headers: {
+      'X-Auth-Token': env.FOOTBALL_DATA_TOKEN,
+      'X-Unfold-Goals': 'true',
+    },
   });
   if (!res.ok) return;
 
@@ -85,6 +97,30 @@ export async function syncMatchResults(env: Env): Promise<void> {
   }
   for (let i = 0; i < eventStmts.length; i += 20) {
     await env.DB.batch(eventStmts.slice(i, i + 20));
+  }
+
+  // Sync per-goal scorer data for finished matches
+  const goalStmts: D1PreparedStatement[] = [];
+  for (const m of data.matches) {
+    if (m.status !== 'FINISHED' || !m.goals?.length) continue;
+    const matchNum = FD_MATCH_IDS.indexOf(m.id) + 1;
+    if (matchNum === 0) continue;
+    for (const g of m.goals) {
+      goalStmts.push(env.DB.prepare(
+        `INSERT OR IGNORE INTO goal_events (match_num, minute, extra_time, scorer_name, team_name, goal_type)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      ).bind(
+        matchNum,
+        g.minute ?? null,
+        g.injuryTime ?? null,
+        g.scorer?.name ?? null,
+        g.team?.name ?? null,
+        g.type ?? null,
+      ));
+    }
+  }
+  for (let i = 0; i < goalStmts.length; i += 20) {
+    await env.DB.batch(goalStmts.slice(i, i + 20));
   }
 
   await syncGroupStandings(env);

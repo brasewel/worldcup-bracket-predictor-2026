@@ -323,13 +323,15 @@ export async function handleApi(request: Request, env: Env): Promise<Response | 
   const matchEventsMatch = path.match(/^\/api\/match-events\/(\d+)$/);
   if (matchEventsMatch && request.method === 'GET') {
     const mn = parseInt(matchEventsMatch[1]);
-    const [events, matchRow] = await Promise.all([
+    const [events, matchRow, goals] = await Promise.all([
       env.DB.prepare('SELECT home_score, away_score, detected_at FROM score_events WHERE match_num = ? ORDER BY detected_at')
         .bind(mn).all<{ home_score: number; away_score: number; detected_at: number }>(),
       env.DB.prepare('SELECT home_team, away_team, home_score, away_score, home_score_ht, away_score_ht, status, winner FROM match_results WHERE match_num = ?')
         .bind(mn).first(),
+      env.DB.prepare('SELECT minute, extra_time, scorer_name, team_name, goal_type FROM goal_events WHERE match_num = ? ORDER BY minute ASC, extra_time ASC')
+        .bind(mn).all<{ minute: number | null; extra_time: number | null; scorer_name: string | null; team_name: string | null; goal_type: string | null }>(),
     ]);
-    return json({ events: events.results, match: matchRow });
+    return json({ events: events.results, match: matchRow, goals: goals.results });
   }
 
   // GET /api/match-results

@@ -260,6 +260,14 @@ export function stopSchedulePolling(): void {
   if (schedulePollTimer) { clearInterval(schedulePollTimer); schedulePollTimer = undefined; }
 }
 
+interface GoalEvent {
+  minute: number | null;
+  extra_time: number | null;
+  scorer_name: string | null;
+  team_name: string | null;
+  goal_type: string | null;
+}
+
 export async function toggleMatchDetail(matchId: number): Promise<void> {
   const panel = document.getElementById('match-detail-' + matchId);
   if (!panel) return;
@@ -267,24 +275,48 @@ export async function toggleMatchDetail(matchId: number): Promise<void> {
   panel.innerHTML = '<div style="color:var(--grey);font-size:0.78rem;padding:8px 0">Loading...</div>';
   panel.style.display = 'block';
   try {
-    const data = await apiFetch<{ events: Array<{ home_score: number; away_score: number; detected_at: number }>; match: { home_score_ht: number | null; away_score_ht: number | null; status: string } | null }>('/api/match-events/' + matchId);
-    const { events, match } = data;
+    const data = await apiFetch<{
+      events: Array<{ home_score: number; away_score: number; detected_at: number }>;
+      match: { home_team: string; away_team: string; home_score: number | null; away_score: number | null; home_score_ht: number | null; away_score_ht: number | null; status: string; winner: string | null } | null;
+      goals: GoalEvent[];
+    }>('/api/match-events/' + matchId);
+    const { events, match, goals } = data;
     const ht = (match && match.home_score_ht !== null) ? `HT: ${match.home_score_ht}\u2013${match.away_score_ht}` : '';
     let html = '';
+
     if (match && match.status === 'FINISHED') {
       html += `<div class="match-summary-header">Full time${ht ? ' \u00b7 ' + ht : ''}</div>`;
-    } else {
+    } else if (match) {
       html += `<div class="match-summary-header" style="color:#ef4444">\uD83D\uDD34 Live ${ht ? '\u00b7 HT: ' + ht : ''}</div>`;
     }
-    if (events && events.length) {
+
+    if (goals && goals.length) {
+      // Render per-goal scorer rows
+      html += goals.map(g => {
+        const minStr = g.minute !== null
+          ? (g.extra_time ? `${g.minute}+${g.extra_time}'` : `${g.minute}'`)
+          : '';
+        const scorer = g.scorer_name ?? 'Unknown';
+        const team = g.team_name ? `<span style="color:var(--grey);font-size:0.7rem">(${escHtml(g.team_name)})</span>` : '';
+        const typeLabel = g.goal_type === 'OWN' ? ' <span class="goal-type-badge">OG</span>'
+          : g.goal_type === 'PENALTY' ? ' <span class="goal-type-badge">PEN</span>'
+          : '';
+        return `<div class="goal-event">
+          <span class="goal-minute">${escHtml(minStr)}</span>
+          \u26BD <strong>${escHtml(scorer)}</strong>${typeLabel} ${team}
+        </div>`;
+      }).join('');
+    } else if (events && events.length) {
+      // Fallback: score-change snapshots
       html += events.map(e => {
         const t = new Date(e.detected_at);
         const timeStr = t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         return `<div class="goal-event">\u26BD ${e.home_score}\u2013${e.away_score} <span style="color:var(--grey);font-size:0.68rem">(detected ~${timeStr})</span></div>`;
       }).join('');
     } else {
-      html += '<div style="color:var(--grey);font-size:0.78rem">No score changes detected yet</div>';
+      html += '<div style="color:var(--grey);font-size:0.78rem">No goals recorded yet</div>';
     }
+
     panel.innerHTML = html;
   } catch {
     panel.innerHTML = '<div style="color:#f87171;font-size:0.78rem">Could not load match detail</div>';

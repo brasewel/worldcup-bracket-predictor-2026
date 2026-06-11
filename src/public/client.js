@@ -687,15 +687,12 @@
 
   // src/client/liveResults.ts
   var liveResults = {};
-  var liveResultsLoaded = false;
   async function loadLiveResults() {
-    if (liveResultsLoaded) return;
     try {
       const data = await apiFetch("/api/match-results");
       for (const row of data.results ?? []) {
         liveResults[row.match_num] = row;
       }
-      liveResultsLoaded = true;
     } catch {
     }
   }
@@ -987,22 +984,33 @@
     panel.style.display = "block";
     try {
       const data = await apiFetch("/api/match-events/" + matchId);
-      const { events, match } = data;
+      const { events, match, goals } = data;
       const ht = match && match.home_score_ht !== null ? `HT: ${match.home_score_ht}\u2013${match.away_score_ht}` : "";
       let html = "";
       if (match && match.status === "FINISHED") {
         html += `<div class="match-summary-header">Full time${ht ? " \xB7 " + ht : ""}</div>`;
-      } else {
+      } else if (match) {
         html += `<div class="match-summary-header" style="color:#ef4444">\u{1F534} Live ${ht ? "\xB7 HT: " + ht : ""}</div>`;
       }
-      if (events && events.length) {
+      if (goals && goals.length) {
+        html += goals.map((g) => {
+          const minStr = g.minute !== null ? g.extra_time ? `${g.minute}+${g.extra_time}'` : `${g.minute}'` : "";
+          const scorer = g.scorer_name ?? "Unknown";
+          const team = g.team_name ? `<span style="color:var(--grey);font-size:0.7rem">(${escHtml(g.team_name)})</span>` : "";
+          const typeLabel = g.goal_type === "OWN" ? ' <span class="goal-type-badge">OG</span>' : g.goal_type === "PENALTY" ? ' <span class="goal-type-badge">PEN</span>' : "";
+          return `<div class="goal-event">
+          <span class="goal-minute">${escHtml(minStr)}</span>
+          \u26BD <strong>${escHtml(scorer)}</strong>${typeLabel} ${team}
+        </div>`;
+        }).join("");
+      } else if (events && events.length) {
         html += events.map((e) => {
           const t = new Date(e.detected_at);
           const timeStr = t.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
           return `<div class="goal-event">\u26BD ${e.home_score}\u2013${e.away_score} <span style="color:var(--grey);font-size:0.68rem">(detected ~${timeStr})</span></div>`;
         }).join("");
       } else {
-        html += '<div style="color:var(--grey);font-size:0.78rem">No score changes detected yet</div>';
+        html += '<div style="color:var(--grey);font-size:0.78rem">No goals recorded yet</div>';
       }
       panel.innerHTML = html;
     } catch {
@@ -1625,6 +1633,86 @@
     }
   }
 
+  // src/client/liveBracket.ts
+  var ROUNDS = [
+    { label: "Round of 32", matchNums: Array.from({ length: 16 }, (_, i) => 73 + i) },
+    { label: "Round of 16", matchNums: Array.from({ length: 8 }, (_, i) => 89 + i) },
+    { label: "Quarter-finals", matchNums: Array.from({ length: 4 }, (_, i) => 97 + i) },
+    { label: "Semi-finals", matchNums: Array.from({ length: 2 }, (_, i) => 101 + i) },
+    { label: "Final", matchNums: [104] }
+  ];
+  function matchSlotHtml(matchNum) {
+    const m = getLiveTeams(matchNum);
+    if (!m) {
+      return `<div class="lb-match lb-match--tbd">
+      <div class="lb-team lb-team--tbd"><span class="lb-flag">\u{1F3F3}</span><span class="lb-name">TBD</span></div>
+      <div class="lb-vs">vs</div>
+      <div class="lb-team lb-team--tbd"><span class="lb-flag">\u{1F3F3}</span><span class="lb-name">TBD</span></div>
+    </div>`;
+    }
+    const homeWon = m.status === "FINISHED" && m.homeScore !== null && m.awayScore !== null && m.homeScore > m.awayScore;
+    const awayWon = m.status === "FINISHED" && m.homeScore !== null && m.awayScore !== null && m.awayScore > m.homeScore;
+    const live = m.status === "IN_PLAY" || m.status === "PAUSED";
+    const homeName = m.home ?? "TBD";
+    const awayName = m.away ?? "TBD";
+    const homeScore = m.homeScore !== null ? `<span class="lb-score">${m.homeScore}</span>` : "";
+    const awayScore = m.awayScore !== null ? `<span class="lb-score">${m.awayScore}</span>` : "";
+    const liveIndicator = live ? '<span class="lb-live-dot"></span>' : "";
+    const matchClass = [
+      "lb-match",
+      m.status === "FINISHED" ? "lb-match--finished" : "",
+      live ? "lb-match--live" : ""
+    ].filter(Boolean).join(" ");
+    return `<div class="${matchClass}">
+    ${liveIndicator}
+    <div class="lb-team${homeWon ? " lb-team--winner" : ""}">
+      <span class="lb-flag">${getFlagForTeam(homeName)}</span>
+      <span class="lb-name">${homeName}</span>
+      ${homeScore}
+    </div>
+    <div class="lb-team${awayWon ? " lb-team--winner" : ""}">
+      <span class="lb-flag">${getFlagForTeam(awayName)}</span>
+      <span class="lb-name">${awayName}</span>
+      ${awayScore}
+    </div>
+  </div>`;
+  }
+  function renderLiveBracket() {
+    const container = document.getElementById("live-bracket-panel");
+    if (!container) return;
+    let html = '<div style="text-align:center;padding:12px 0 4px;color:var(--grey);font-size:0.78rem">Showing real match results \xB7 auto-refreshes every 60s</div>';
+    html += '<div class="lb-bracket">';
+    for (const round of ROUNDS) {
+      html += `<div class="lb-round">
+      <div class="lb-round-label">${round.label}</div>
+      <div class="lb-round-matches">`;
+      for (const matchNum of round.matchNums) {
+        html += `<div class="lb-match-wrapper" data-match="${matchNum}">
+        ${matchSlotHtml(matchNum)}
+        <div class="lb-match-num">M${matchNum}</div>
+      </div>`;
+      }
+      html += "</div></div>";
+    }
+    html += "</div>";
+    container.innerHTML = html;
+  }
+  var liveBracketTimer;
+  function startLiveBracketPolling() {
+    if (liveBracketTimer) return;
+    loadLiveResults().then(() => renderLiveBracket());
+    liveBracketTimer = setInterval(async () => {
+      await loadLiveResults();
+      renderLiveBracket();
+    }, 60 * 1e3);
+  }
+  function stopLiveBracketPolling() {
+    if (liveBracketTimer) {
+      clearInterval(liveBracketTimer);
+      liveBracketTimer = void 0;
+    }
+  }
+
   // src/client/main.ts
   var deadlineWarningDismissed = false;
   var deadlinePassedHandled = false;
@@ -2061,14 +2149,17 @@
     const isBracket = tab === "bracket";
     const isSchedule = tab === "schedule";
     const isLeaderboard = tab === "leaderboard";
+    const isLiveBracket = tab === "live-bracket";
     const loaded = state.bracketLoaded || state.isViewing;
     document.getElementById("bracket-content").style.display = isBracket && loaded ? "block" : "none";
     document.getElementById("pre-login-placeholder").style.display = isBracket && !loaded ? "flex" : "none";
     document.getElementById("schedule-panel").style.display = isSchedule ? "block" : "none";
     document.getElementById("leaderboard-panel").style.display = isLeaderboard ? "block" : "none";
+    document.getElementById("live-bracket-panel").style.display = isLiveBracket ? "block" : "none";
     document.getElementById("tab-bracket").classList.toggle("tab-active", isBracket);
     document.getElementById("tab-schedule").classList.toggle("tab-active", isSchedule);
     document.getElementById("tab-leaderboard").classList.toggle("tab-active", isLeaderboard);
+    document.getElementById("tab-live-bracket").classList.toggle("tab-active", isLiveBracket);
     if (isSchedule) {
       renderSchedule();
       startSchedulePolling();
@@ -2083,6 +2174,11 @@
       startLeaderboard();
     } else {
       stopLeaderboard();
+    }
+    if (isLiveBracket) {
+      startLiveBracketPolling();
+    } else {
+      stopLiveBracketPolling();
     }
   }
   function toggleRules() {
