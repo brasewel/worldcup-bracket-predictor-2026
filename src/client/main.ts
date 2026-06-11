@@ -208,12 +208,14 @@ async function confirmAdminDelete(): Promise<void> {
 // ── Load / login ─────────────────────────────────────────────────────────────
 
 async function handleLoad(): Promise<void> {
-  const name = (document.getElementById('input-name') as HTMLInputElement).value.trim();
+  const nameInput = (document.getElementById('input-name') as HTMLInputElement).value.trim();
   const email = (document.getElementById('input-email') as HTMLInputElement).value.trim().toLowerCase();
   const errEl = document.getElementById('load-error')!;
   errEl.style.display = 'none';
-  if (!name) { errEl.textContent = 'Please enter your name.'; errEl.style.display = 'block'; return; }
+  // After the deadline the name field is hidden — only email is required
+  if (!isPastDeadline() && !nameInput) { errEl.textContent = 'Please enter your name.'; errEl.style.display = 'block'; return; }
   if (!email || !email.includes('@')) { errEl.textContent = 'Please enter a valid email.'; errEl.style.display = 'block'; return; }
+  const name = nameInput || 'viewer'; // placeholder until real name is loaded from bracket
 
   state.name = name;
   state.email = email;
@@ -234,6 +236,8 @@ async function handleLoad(): Promise<void> {
 
   try {
     const data = await apiBracketGet(email);
+    // Use the real display_name from the saved bracket (especially important post-deadline)
+    if (data.bracket.display_name) state.name = String(data.bracket.display_name);
     let bd: Record<string, unknown> = {};
     try { bd = JSON.parse(data.bracket.bracket_data); } catch { /* corrupt data — start fresh */ }
     if (bd.groups) state.groups = bd.groups as Record<string, string[]>;
@@ -245,12 +249,20 @@ async function handleLoad(): Promise<void> {
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : '';
     if (msg.includes('404') || msg.includes('Not found')) {
+      if (isPastDeadline()) {
+        // After deadline: no new brackets allowed — just tell them
+        btn.disabled = false;
+        btn.textContent = 'Load My Bracket';
+        errEl.textContent = 'No bracket found for that email. Picks closed \u2014 new entries are not accepted.';
+        errEl.style.display = 'block';
+        return;
+      }
       state.bracketLoaded = true;
       showToast('New bracket started for ' + name + '! Fill in your picks below.', 'success');
     } else {
       // Non-404 error: do not show bracket UI to avoid overwriting a real bracket
       btn.disabled = false;
-      btn.textContent = 'Load / New Bracket';
+      btn.textContent = isPastDeadline() ? 'Load My Bracket' : 'Load / New Bracket';
       errEl.textContent = 'Could not load bracket: ' + msg;
       errEl.style.display = 'block';
       return;
@@ -362,9 +374,36 @@ function stopViewing(): void {
   }
 }
 
+// ── Login card: hide new-entry fields once tournament starts ─────────────────
+
+let loginCardUpdated = false;
+
+function updateLoginCard(): void {
+  if (loginCardUpdated) return;
+  if (!isPastDeadline()) return; // nothing to change before deadline
+  const card = document.getElementById('login-card');
+  if (!card) return;
+
+  loginCardUpdated = true;
+  // Replace the card content with a locked-down viewer form
+  card.innerHTML = `
+    <div class="card-title">\uD83D\uDD12 Tournament Live</div>
+    <p style="font-size:0.78rem;color:var(--grey);margin:0 0 12px;line-height:1.5;">
+      Picks are closed. Enter your email to load your bracket and see your score.
+    </p>
+    <input type="email" id="input-email" class="input-field" placeholder="your@email.com"/>
+    <input type="hidden" id="input-name" value="viewer"/>
+    <button class="btn btn-gold" id="btn-load" style="margin-top:8px">Load My Bracket</button>
+    <div id="load-error" style="color:var(--red);font-size:0.75rem;margin-top:8px;display:none;"></div>
+  `;
+  // Re-wire the load button (DOM was replaced)
+  document.getElementById('btn-load')!.addEventListener('click', handleLoad);
+}
+
 // ── Render all ───────────────────────────────────────────────────────────────
 
 function renderAll(): void {
+  updateLoginCard();
   updateGroupStageVisibility();
   renderGroups();
   renderThirdPlaceSection();
@@ -524,7 +563,8 @@ const PASS_KEY = 'wc26_unlocked';
 function checkPassword(): void {
   const gate = document.getElementById('password-gate')!;
   const app  = document.getElementById('app-root')!;
-  if (sessionStorage.getItem(PASS_KEY) === '1') {
+  // Once the tournament has started the gate is removed — anyone can view results
+  if (isPastDeadline() || sessionStorage.getItem(PASS_KEY) === '1') {
     gate.style.display = 'none';
     app.style.display  = 'block';
     loadPredictionsList();
@@ -672,6 +712,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Init: load live results for ticker, then check password
   loadLiveResults().then(renderTicker);
   checkPassword();
+  updateLoginCard();
   renderPlaceholder();
 
   // Handle ?view=email shareable link

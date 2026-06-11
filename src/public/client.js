@@ -1788,11 +1788,11 @@
     }
   }
   async function handleLoad() {
-    const name = document.getElementById("input-name").value.trim();
+    const nameInput = document.getElementById("input-name").value.trim();
     const email = document.getElementById("input-email").value.trim().toLowerCase();
     const errEl = document.getElementById("load-error");
     errEl.style.display = "none";
-    if (!name) {
+    if (!isPastDeadline() && !nameInput) {
       errEl.textContent = "Please enter your name.";
       errEl.style.display = "block";
       return;
@@ -1802,6 +1802,7 @@
       errEl.style.display = "block";
       return;
     }
+    const name = nameInput || "viewer";
     state.name = name;
     state.email = email;
     state.isViewing = false;
@@ -1819,6 +1820,7 @@
     btn.innerHTML = '<span class="spinner"></span> Loading...';
     try {
       const data = await apiBracketGet(email);
+      if (data.bracket.display_name) state.name = String(data.bracket.display_name);
       let bd = {};
       try {
         bd = JSON.parse(data.bracket.bracket_data);
@@ -1833,11 +1835,18 @@
     } catch (e) {
       const msg = e instanceof Error ? e.message : "";
       if (msg.includes("404") || msg.includes("Not found")) {
+        if (isPastDeadline()) {
+          btn.disabled = false;
+          btn.textContent = "Load My Bracket";
+          errEl.textContent = "No bracket found for that email. Picks closed \u2014 new entries are not accepted.";
+          errEl.style.display = "block";
+          return;
+        }
         state.bracketLoaded = true;
         showToast("New bracket started for " + name + "! Fill in your picks below.", "success");
       } else {
         btn.disabled = false;
-        btn.textContent = "Load / New Bracket";
+        btn.textContent = isPastDeadline() ? "Load My Bracket" : "Load / New Bracket";
         errEl.textContent = "Could not load bracket: " + msg;
         errEl.style.display = "block";
         return;
@@ -1935,7 +1944,27 @@
       renderAll();
     }
   }
+  var loginCardUpdated = false;
+  function updateLoginCard() {
+    if (loginCardUpdated) return;
+    if (!isPastDeadline()) return;
+    const card = document.getElementById("login-card");
+    if (!card) return;
+    loginCardUpdated = true;
+    card.innerHTML = `
+    <div class="card-title">\u{1F512} Tournament Live</div>
+    <p style="font-size:0.78rem;color:var(--grey);margin:0 0 12px;line-height:1.5;">
+      Picks are closed. Enter your email to load your bracket and see your score.
+    </p>
+    <input type="email" id="input-email" class="input-field" placeholder="your@email.com"/>
+    <input type="hidden" id="input-name" value="viewer"/>
+    <button class="btn btn-gold" id="btn-load" style="margin-top:8px">Load My Bracket</button>
+    <div id="load-error" style="color:var(--red);font-size:0.75rem;margin-top:8px;display:none;"></div>
+  `;
+    document.getElementById("btn-load").addEventListener("click", handleLoad);
+  }
   function renderAll() {
+    updateLoginCard();
     updateGroupStageVisibility();
     renderGroups();
     renderThirdPlaceSection();
@@ -2068,7 +2097,7 @@
   function checkPassword() {
     const gate = document.getElementById("password-gate");
     const app = document.getElementById("app-root");
-    if (sessionStorage.getItem(PASS_KEY) === "1") {
+    if (isPastDeadline() || sessionStorage.getItem(PASS_KEY) === "1") {
       gate.style.display = "none";
       app.style.display = "block";
       loadPredictionsList();
@@ -2175,6 +2204,7 @@
     updateCountdown();
     loadLiveResults().then(renderTicker);
     checkPassword();
+    updateLoginCard();
     renderPlaceholder();
     const viewParam = new URLSearchParams(location.search).get("view");
     if (viewParam) {
