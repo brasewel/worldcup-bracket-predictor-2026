@@ -1,4 +1,4 @@
-import { state, isPastDeadline, isReadOnly, resetGroupsToDefault } from './state';
+import { state, isPastDeadline, isReadOnly, resetGroupsToDefault, DEADLINE } from './state';
 import { GROUPS_DATA } from './data';
 import { apiFetch, apiBracketList, apiBracketGet, apiBracketSave, BracketListItem } from './api';
 import { escHtml, escJs, timeAgo, showToast } from './utils';
@@ -32,7 +32,7 @@ function updateCountdown(): void {
     renderSaveBar();
     return;
   }
-  const diff = (window as any).__DEADLINE_MS__ - Date.now();
+  const diff = DEADLINE - Date.now();
   const h = Math.floor(diff / 3600000);
   const m = Math.floor((diff % 3600000) / 60000);
   const s = Math.floor((diff % 60000) / 1000);
@@ -354,8 +354,6 @@ function submitPassword(): void {
 declare global {
   interface Window {
     __app: Record<string, unknown>;
-    __DEADLINE_MS__: number;
-    __GROUPS_JSON__: string;
   }
 }
 

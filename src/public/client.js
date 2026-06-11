@@ -557,7 +557,7 @@
       bar.innerHTML = '<div class="locked-banner">\u{1F512} Your picks are permanently locked</div>';
       return;
     }
-    if (Date.now() >= window.__DEADLINE_MS__) {
+    if (Date.now() >= DEADLINE) {
       bar.innerHTML = '<div class="locked-banner">\u{1F512} Picks are locked \u2014 Tournament has started!</div>';
       return;
     }
@@ -1254,7 +1254,7 @@
       renderSaveBar();
       return;
     }
-    const diff = window.__DEADLINE_MS__ - Date.now();
+    const diff = DEADLINE - Date.now();
     const h = Math.floor(diff / 36e5);
     const m = Math.floor(diff % 36e5 / 6e4);
     const s = Math.floor(diff % 6e4 / 1e3);

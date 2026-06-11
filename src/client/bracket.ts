@@ -1,4 +1,4 @@
-import { state, isReadOnly } from './state';
+import { state, isReadOnly, DEADLINE } from './state';
 import { GROUPS_DATA, R32_SEEDS, ROUND_COUNTS, getFlagForTeam } from './data';
 import { escHtml, escJs } from './utils';
 import { getConsensusBadge } from './consensus';
@@ -243,7 +243,7 @@ export function renderSaveBar(): void {
     bar.innerHTML = '<div class="locked-banner">\uD83D\uDD12 Your picks are permanently locked</div>';
     return;
   }
-  if (Date.now() >= (window as any).__DEADLINE_MS__) {
+  if (Date.now() >= DEADLINE) {
     bar.innerHTML = '<div class="locked-banner">\uD83D\uDD12 Picks are locked \u2014 Tournament has started!</div>';
     return;
   }
