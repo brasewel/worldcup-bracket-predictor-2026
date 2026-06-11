@@ -1,6 +1,167 @@
 import { Env } from '../index';
 import { FD_MATCH_IDS } from '../data/constants';
 
+// ── worldcup26.ir community API (real-time live scores) ──────────────────────
+
+interface WC26Game {
+  id: string;                   // "1" – "104", maps directly to match_num
+  home_team_name_en: string | null;
+  away_team_name_en: string | null;
+  home_score: string | null;    // "1" or null/"0"
+  away_score: string | null;
+  home_scorers: string | null;  // PostgreSQL array string: {"Name 9'", "Name2 45'"}
+  away_scorers: string | null;
+  time_elapsed: string | null;  // "live", "notstarted", "45", "halftime", "finished" etc.
+  finished: string | null;      // "TRUE" / "FALSE"
+  type: string | null;          // "group" | "knockout"
+}
+
+/** Parse PostgreSQL-style array string {"Name 9'", "Name2 45'"} → string[] */
+function parseScorers(raw: string | null): string[] {
+  if (!raw || raw === 'null') return [];
+  // Strip outer braces, then split on comma-separated quoted strings
+  const inner = raw.replace(/^\{/, '').replace(/\}$/, '');
+  const results: string[] = [];
+  // Match content between smart quotes or regular quotes
+  const re = /[\u201c\u201d"](.*?)[\u201c\u201d"]/g;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(inner)) !== null) {
+    if (match[1].trim()) results.push(match[1].trim());
+  }
+  // Fallback: if no quoted entries found, try raw comma split
+  if (!results.length && inner.trim()) {
+    results.push(...inner.split(',').map(s => s.trim()).filter(Boolean));
+  }
+  return results;
+}
+
+/** Parse scorer string like "J. Quiñones 9'" → { name, minute } */
+function parseScorer(entry: string): { name: string; minute: number | null } {
+  const minuteMatch = entry.match(/(\d+)(?:\+\d+)?['′]?\s*$/);
+  const minute = minuteMatch ? parseInt(minuteMatch[1], 10) : null;
+  const name = entry.replace(/\s*\d+(?:\+\d+)?['′]?\s*$/, '').trim();
+  return { name, minute };
+}
+
+export async function syncLiveScores(env: Env): Promise<void> {
+  let games: WC26Game[];
+  try {
+    const res = await fetch('https://worldcup26.ir/get/games');
+    if (!res.ok) return;
+    const raw = await res.json() as WC26Game[] | unknown;
+    games = Array.isArray(raw) ? raw as WC26Game[] : [];
+    if (!games.length) return;
+  } catch {
+    return; // Community API down — fail silently, don't break the main sync
+  }
+
+  const now = Date.now();
+
+  // Read existing scores to detect changes for score_events
+  const existingScores = await env.DB.prepare(
+    'SELECT match_num, home_score, away_score FROM match_results WHERE home_score IS NOT NULL'
+  ).all<{ match_num: number; home_score: number; away_score: number }>();
+  const existingMap: Record<number, { home: number; away: number }> = {};
+  for (const r of existingScores.results) {
+    existingMap[r.match_num] = { home: r.home_score, away: r.away_score };
+  }
+
+  const matchStmts: D1PreparedStatement[] = [];
+  const goalStmts: D1PreparedStatement[] = [];
+  const scoreEventStmts: D1PreparedStatement[] = [];
+
+  for (const g of games) {
+    const matchNum = parseInt(g.id, 10);
+    if (!matchNum || matchNum < 1 || matchNum > 104) continue;
+
+    const homeScore = g.home_score !== null && g.home_score !== '' ? parseInt(g.home_score, 10) : null;
+    const awayScore = g.away_score !== null && g.away_score !== '' ? parseInt(g.away_score, 10) : null;
+
+    const isFinished = g.finished === 'TRUE';
+    const isLive = !isFinished && g.time_elapsed === 'live';
+    const isHalfTime = !isFinished && g.time_elapsed === 'halftime';
+
+    // Map to our status values
+    let status: string;
+    if (isFinished) status = 'FINISHED';
+    else if (isLive) status = 'IN_PLAY';
+    else if (isHalfTime) status = 'HALFTIME';
+    else status = 'TIMED';
+
+    // Parse minute from time_elapsed (e.g. "67" → 67)
+    const minuteRaw = g.time_elapsed ? parseInt(g.time_elapsed, 10) : NaN;
+    const matchMinute = !isNaN(minuteRaw) && isLive ? minuteRaw : null;
+
+    // Winner (only for finished matches)
+    let winner: string | null = null;
+    if (isFinished && homeScore !== null && awayScore !== null) {
+      if (homeScore > awayScore) winner = g.home_team_name_en ?? null;
+      else if (awayScore > homeScore) winner = g.away_team_name_en ?? null;
+    }
+
+    // Only update score/status/minute — do NOT overwrite rich FD stats (possession etc.)
+    // Use match_num as lookup key since this API doesn't have fd_match_id
+    if (homeScore !== null && awayScore !== null) {
+      matchStmts.push(env.DB.prepare(
+        `UPDATE match_results SET
+           home_score   = ?, away_score  = ?,
+           status       = ?, winner      = ?,
+           match_minute = ?, updated_at  = ?
+         WHERE match_num = ?`
+      ).bind(homeScore, awayScore, status, winner, matchMinute, now, matchNum));
+    } else {
+      // No score yet — only update status
+      matchStmts.push(env.DB.prepare(
+        `UPDATE match_results SET status = ?, match_minute = ?, updated_at = ? WHERE match_num = ?`
+      ).bind(status, matchMinute, now, matchNum));
+    }
+
+    // Detect score change → score_events
+    if (homeScore !== null && awayScore !== null) {
+      const prev = existingMap[matchNum];
+      if (!prev || prev.home !== homeScore || prev.away !== awayScore) {
+        scoreEventStmts.push(env.DB.prepare(
+          `INSERT OR IGNORE INTO score_events (match_num, home_score, away_score, detected_at) VALUES (?, ?, ?, ?)`
+        ).bind(matchNum, homeScore, awayScore, now));
+      }
+    }
+
+    // Sync scorers from home_scorers / away_scorers strings
+    const homeTeam = g.home_team_name_en ?? null;
+    const awayTeam = g.away_team_name_en ?? null;
+
+    const homeScorers = parseScorers(g.home_scorers);
+    for (const entry of homeScorers) {
+      const { name, minute } = parseScorer(entry);
+      if (!name) continue;
+      goalStmts.push(env.DB.prepare(
+        `INSERT OR IGNORE INTO goal_events (match_num, minute, scorer_name, team_name, goal_type)
+         VALUES (?, ?, ?, ?, ?)`
+      ).bind(matchNum, minute, name, homeTeam, 'REGULAR'));
+    }
+
+    const awayScorers = parseScorers(g.away_scorers);
+    for (const entry of awayScorers) {
+      const { name, minute } = parseScorer(entry);
+      if (!name) continue;
+      goalStmts.push(env.DB.prepare(
+        `INSERT OR IGNORE INTO goal_events (match_num, minute, scorer_name, team_name, goal_type)
+         VALUES (?, ?, ?, ?, ?)`
+      ).bind(matchNum, minute, name, awayTeam, 'REGULAR'));
+    }
+  }
+
+  for (let i = 0; i < matchStmts.length; i += 20) {
+    await env.DB.batch(matchStmts.slice(i, i + 20));
+  }
+  for (let i = 0; i < goalStmts.length; i += 20) {
+    await env.DB.batch(goalStmts.slice(i, i + 20));
+  }
+  for (let i = 0; i < scoreEventStmts.length; i += 20) {
+    await env.DB.batch(scoreEventStmts.slice(i, i + 20));
+  }
+}
+
 interface FDGoal {
   minute: number | null;
   injuryTime: number | null;
@@ -96,12 +257,13 @@ export async function syncMatchResults(env: Env): Promise<void> {
        ON CONFLICT(fd_match_id) DO UPDATE SET
          home_team = excluded.home_team,
          away_team = excluded.away_team,
-         home_score = excluded.home_score,
-         away_score = excluded.away_score,
+         -- Only overwrite score/status/winner if FD actually has data; otherwise keep what live sync wrote
+         home_score = CASE WHEN excluded.home_score IS NOT NULL THEN excluded.home_score ELSE home_score END,
+         away_score = CASE WHEN excluded.away_score IS NOT NULL THEN excluded.away_score ELSE away_score END,
          home_score_ht = excluded.home_score_ht,
          away_score_ht = excluded.away_score_ht,
-         status = excluded.status,
-         winner = excluded.winner,
+         status = CASE WHEN excluded.status != 'TIMED' THEN excluded.status ELSE status END,
+         winner = CASE WHEN excluded.winner IS NOT NULL THEN excluded.winner ELSE winner END,
          home_possession = excluded.home_possession,
          away_possession = excluded.away_possession,
          home_shots_on = excluded.home_shots_on,
@@ -112,7 +274,7 @@ export async function syncMatchResults(env: Env): Promise<void> {
          away_yellow = excluded.away_yellow,
          home_red = excluded.home_red,
          away_red = excluded.away_red,
-         match_minute = excluded.match_minute,
+         match_minute = CASE WHEN excluded.match_minute IS NOT NULL THEN excluded.match_minute ELSE match_minute END,
          match_injury = excluded.match_injury,
          updated_at = excluded.updated_at`
     ).bind(

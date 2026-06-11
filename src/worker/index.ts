@@ -1,6 +1,6 @@
 import { handleApi } from './routes/api';
 import { serveHtml } from './routes/html';
-import { syncMatchResults } from './services/sync';
+import { syncMatchResults, syncLiveScores } from './services/sync';
 
 export interface Env {
   DB: D1Database;
@@ -34,6 +34,7 @@ export default {
   },
 
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
-    ctx.waitUntil(syncMatchResults(env));
+    // Run live score sync first (fast, real-time community API), then full FD sync for rich stats
+    ctx.waitUntil(syncLiveScores(env).then(() => syncMatchResults(env)));
   },
 };
