@@ -222,6 +222,20 @@
   <div id="schedule-days"></div>
 </div>
 
+<!-- Admin delete modal -->
+<div class="modal-overlay" id="admin-modal">
+  <div class="modal">
+    <h2>🗑️ Delete Entry</h2>
+    <p>Enter the admin password to permanently delete <strong id="admin-delete-name"></strong>.</p>
+    <input type="password" id="admin-pass-input" class="input-field" placeholder="Admin password" style="margin:14px 0 6px" autocomplete="off"/>
+    <div id="admin-pass-error" style="display:none;color:var(--red);font-size:0.78rem;margin-bottom:8px">Wrong password.</div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" style="flex:1" id="admin-cancel-btn">Cancel</button>
+      <button class="btn btn-danger" style="flex:1" id="admin-confirm-btn">Delete</button>
+    </div>
+  </div>
+</div>
+
 <!-- Confirm modal -->
 <div class="modal-overlay" id="confirm-modal">
   <div class="modal">

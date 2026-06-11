@@ -103,15 +103,79 @@ function renderPredictionsList(brackets: BracketListItem[]): void {
     const ago = timeAgo(b.updated_at);
     const avatar = (b.display_name || '?')[0].toUpperCase();
     const isLocked = !!b.locked;
-    return `<div class="prediction-item" data-email="${escHtml(b.email)}" onclick="window.__app.viewBracket('${escJs(b.email)}','${escJs(b.display_name)}')">
+    const canView = isPastDeadline() || b.email === state.email;
+    const itemStyle = canView ? '' : ' style="cursor:default;opacity:0.85"';
+    return `<div class="prediction-item" data-email="${escHtml(b.email)}"${itemStyle} onclick="window.__app.viewBracket('${escJs(b.email)}','${escJs(b.display_name)}')">
       <div class="prediction-avatar">${escHtml(avatar)}</div>
       <div class="prediction-info">
         <div class="prediction-name">${escHtml(b.display_name)}</div>
-        <div class="prediction-time">${ago}</div>
+        <div class="prediction-time">${ago}${!canView ? ' \u00b7 \uD83D\uDD12 hidden' : ''}</div>
       </div>
-      ${isLocked ? '<span class="lock-badge locked-personal">\uD83D\uDD12 Locked</span>' : '<span class="lock-badge">Draft</span>'}
+      <div style="display:flex;align-items:center;gap:4px">
+        ${isLocked ? '<span class="lock-badge locked-personal">\uD83D\uDD12 Locked</span>' : '<span class="lock-badge">Draft</span>'}
+        <button class="admin-delete-btn" title="Delete entry" onclick="event.stopPropagation();window.__app.openAdminDelete('${escJs(b.email)}','${escJs(b.display_name)}')" aria-label="Delete">🗑️</button>
+      </div>
     </div>`;
   }).join('');
+}
+
+// ── Admin delete ──────────────────────────────────────────────────────────────
+
+let adminDeleteTarget: { email: string; name: string } | null = null;
+
+function openAdminDelete(email: string, name: string): void {
+  adminDeleteTarget = { email, name };
+  document.getElementById('admin-delete-name')!.textContent = name + ' (' + email + ')';
+  (document.getElementById('admin-pass-input') as HTMLInputElement).value = '';
+  document.getElementById('admin-pass-error')!.style.display = 'none';
+  document.getElementById('admin-modal')!.classList.add('open');
+  setTimeout(() => (document.getElementById('admin-pass-input') as HTMLInputElement).focus(), 50);
+}
+
+function closeAdminModal(): void {
+  document.getElementById('admin-modal')!.classList.remove('open');
+  adminDeleteTarget = null;
+}
+
+async function confirmAdminDelete(): Promise<void> {
+  if (!adminDeleteTarget) return;
+  const pass = (document.getElementById('admin-pass-input') as HTMLInputElement).value;
+  const btn = document.getElementById('admin-confirm-btn') as HTMLButtonElement;
+  btn.disabled = true;
+  btn.textContent = 'Deleting...';
+  try {
+    const res = await fetch('/api/admin/brackets/' + encodeURIComponent(adminDeleteTarget.email), {
+      method: 'DELETE',
+      headers: { 'X-Admin-Password': pass },
+    });
+    if (res.status === 401) {
+      document.getElementById('admin-pass-error')!.style.display = 'block';
+      btn.disabled = false;
+      btn.textContent = 'Delete';
+      return;
+    }
+    if (!res.ok) throw new Error('Server error');
+    // If we just deleted our own bracket, reset state
+    if (adminDeleteTarget.email === state.email) {
+      state.email = '';
+      state.name = '';
+      state.bracketLoaded = false;
+      state.locked = false;
+      state.knockout = {};
+      state.predicted3rd = {};
+      resetGroupsToDefault();
+      document.getElementById('bracket-content')!.style.display = 'none';
+      document.getElementById('pre-login-placeholder')!.style.display = 'flex';
+      renderPlaceholder();
+    }
+    closeAdminModal();
+    showToast('🗑️ Deleted ' + adminDeleteTarget.name, 'success');
+    loadPredictionsList();
+  } catch {
+    showToast('Delete failed — check password', 'error');
+    btn.disabled = false;
+    btn.textContent = 'Delete';
+  }
 }
 
 // ── Load / login ─────────────────────────────────────────────────────────────
@@ -181,6 +245,11 @@ async function handleLoad(): Promise<void> {
 // ── View others ──────────────────────────────────────────────────────────────
 
 async function viewBracket(email: string, displayName: string): Promise<void> {
+  // Only allow viewing your own bracket before the deadline
+  if (!isPastDeadline() && email !== state.email) {
+    showToast('🔒 Brackets are hidden until picks close at 5 PM ET today.', 'error');
+    return;
+  }
   try {
     const data = await apiBracketGet(email);
     const bd = JSON.parse(data.bracket.bracket_data);
@@ -451,6 +520,7 @@ window.__app = {
   viewBracket,
   stopViewing,
   loadOtherBracketFromEmail,
+  openAdminDelete,
   switchTabPublic,
   scrollToSidebar,
   scrollToSaveBar,
@@ -504,6 +574,17 @@ document.addEventListener('DOMContentLoaded', () => {
   // Confirm modal
   document.getElementById('modal-cancel-btn')!.addEventListener('click', closeModal);
   document.getElementById('modal-confirm-btn')!.addEventListener('click', confirmLock);
+
+  // Admin delete modal
+  document.getElementById('admin-cancel-btn')!.addEventListener('click', closeAdminModal);
+  document.getElementById('admin-confirm-btn')!.addEventListener('click', confirmAdminDelete);
+  document.getElementById('admin-modal')!.addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeAdminModal();
+  });
+  (document.getElementById('admin-pass-input') as HTMLInputElement).addEventListener('keydown', e => {
+    if (e.key === 'Enter') confirmAdminDelete();
+    if (e.key === 'Escape') closeAdminModal();
+  });
 
   // H2H modal close
   document.getElementById('h2h-modal')!.addEventListener('click', e => {

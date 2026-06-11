@@ -4,8 +4,8 @@ import { syncMatchResults } from '../services/sync';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, X-Admin-Password',
 } as const;
 
 function json(data: unknown, status = 200): Response {
@@ -344,6 +344,21 @@ export async function handleApi(request: Request, env: Env): Promise<Response | 
   if (path === '/api/sync-matches' && request.method === 'POST') {
     await syncMatchResults(env);
     return json({ ok: true });
+  }
+
+  // DELETE /api/admin/brackets/:email — admin only
+  const adminDeleteMatch = path.match(/^\/api\/admin\/brackets\/(.+)$/);
+  if (adminDeleteMatch && request.method === 'DELETE') {
+    const provided = request.headers.get('X-Admin-Password') ?? '';
+    if (!env.ADMIN_PASSWORD || provided !== env.ADMIN_PASSWORD) {
+      return json({ error: 'Unauthorized' }, 401);
+    }
+    const email = decodeURIComponent(adminDeleteMatch[1]);
+    await env.DB.prepare('DELETE FROM brackets WHERE email = ?').bind(email).run();
+    await env.DB.prepare('DELETE FROM live_picks WHERE email = ?').bind(email).run();
+    await env.DB.prepare('DELETE FROM score_picks WHERE email = ?').bind(email).run();
+    await env.DB.prepare('DELETE FROM golden_boot_picks WHERE email = ?').bind(email).run();
+    return json({ ok: true, deleted: email });
   }
 
   return null; // not handled here

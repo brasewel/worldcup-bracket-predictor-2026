@@ -5,6 +5,7 @@ import { syncMatchResults } from './services/sync';
 export interface Env {
   DB: D1Database;
   FOOTBALL_DATA_TOKEN: string;
+  ADMIN_PASSWORD: string;
   ASSETS: Fetcher;
 }
 

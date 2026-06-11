@@ -1612,15 +1612,72 @@
       const ago = timeAgo(b.updated_at);
       const avatar = (b.display_name || "?")[0].toUpperCase();
       const isLocked = !!b.locked;
-      return `<div class="prediction-item" data-email="${escHtml(b.email)}" onclick="window.__app.viewBracket('${escJs(b.email)}','${escJs(b.display_name)}')">
+      const canView = isPastDeadline() || b.email === state.email;
+      const itemStyle = canView ? "" : ' style="cursor:default;opacity:0.85"';
+      return `<div class="prediction-item" data-email="${escHtml(b.email)}"${itemStyle} onclick="window.__app.viewBracket('${escJs(b.email)}','${escJs(b.display_name)}')">
       <div class="prediction-avatar">${escHtml(avatar)}</div>
       <div class="prediction-info">
         <div class="prediction-name">${escHtml(b.display_name)}</div>
-        <div class="prediction-time">${ago}</div>
+        <div class="prediction-time">${ago}${!canView ? " \xB7 \u{1F512} hidden" : ""}</div>
       </div>
-      ${isLocked ? '<span class="lock-badge locked-personal">\u{1F512} Locked</span>' : '<span class="lock-badge">Draft</span>'}
+      <div style="display:flex;align-items:center;gap:4px">
+        ${isLocked ? '<span class="lock-badge locked-personal">\u{1F512} Locked</span>' : '<span class="lock-badge">Draft</span>'}
+        <button class="admin-delete-btn" title="Delete entry" onclick="event.stopPropagation();window.__app.openAdminDelete('${escJs(b.email)}','${escJs(b.display_name)}')" aria-label="Delete">\u{1F5D1}\uFE0F</button>
+      </div>
     </div>`;
     }).join("");
+  }
+  var adminDeleteTarget = null;
+  function openAdminDelete(email, name) {
+    adminDeleteTarget = { email, name };
+    document.getElementById("admin-delete-name").textContent = name + " (" + email + ")";
+    document.getElementById("admin-pass-input").value = "";
+    document.getElementById("admin-pass-error").style.display = "none";
+    document.getElementById("admin-modal").classList.add("open");
+    setTimeout(() => document.getElementById("admin-pass-input").focus(), 50);
+  }
+  function closeAdminModal() {
+    document.getElementById("admin-modal").classList.remove("open");
+    adminDeleteTarget = null;
+  }
+  async function confirmAdminDelete() {
+    if (!adminDeleteTarget) return;
+    const pass = document.getElementById("admin-pass-input").value;
+    const btn = document.getElementById("admin-confirm-btn");
+    btn.disabled = true;
+    btn.textContent = "Deleting...";
+    try {
+      const res = await fetch("/api/admin/brackets/" + encodeURIComponent(adminDeleteTarget.email), {
+        method: "DELETE",
+        headers: { "X-Admin-Password": pass }
+      });
+      if (res.status === 401) {
+        document.getElementById("admin-pass-error").style.display = "block";
+        btn.disabled = false;
+        btn.textContent = "Delete";
+        return;
+      }
+      if (!res.ok) throw new Error("Server error");
+      if (adminDeleteTarget.email === state.email) {
+        state.email = "";
+        state.name = "";
+        state.bracketLoaded = false;
+        state.locked = false;
+        state.knockout = {};
+        state.predicted3rd = {};
+        resetGroupsToDefault();
+        document.getElementById("bracket-content").style.display = "none";
+        document.getElementById("pre-login-placeholder").style.display = "flex";
+        renderPlaceholder();
+      }
+      closeAdminModal();
+      showToast("\u{1F5D1}\uFE0F Deleted " + adminDeleteTarget.name, "success");
+      loadPredictionsList();
+    } catch {
+      showToast("Delete failed \u2014 check password", "error");
+      btn.disabled = false;
+      btn.textContent = "Delete";
+    }
   }
   async function handleLoad() {
     const name = document.getElementById("input-name").value.trim();
@@ -1686,6 +1743,10 @@
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
   async function viewBracket(email, displayName) {
+    if (!isPastDeadline() && email !== state.email) {
+      showToast("\u{1F512} Brackets are hidden until picks close at 5 PM ET today.", "error");
+      return;
+    }
     try {
       const data = await apiBracketGet(email);
       const bd = JSON.parse(data.bracket.bracket_data);
@@ -1912,6 +1973,7 @@
     viewBracket,
     stopViewing,
     loadOtherBracketFromEmail,
+    openAdminDelete,
     switchTabPublic,
     scrollToSidebar,
     scrollToSaveBar,
@@ -1946,6 +2008,15 @@
     document.getElementById("pass-submit").addEventListener("click", submitPassword);
     document.getElementById("modal-cancel-btn").addEventListener("click", closeModal);
     document.getElementById("modal-confirm-btn").addEventListener("click", confirmLock);
+    document.getElementById("admin-cancel-btn").addEventListener("click", closeAdminModal);
+    document.getElementById("admin-confirm-btn").addEventListener("click", confirmAdminDelete);
+    document.getElementById("admin-modal").addEventListener("click", (e) => {
+      if (e.target === e.currentTarget) closeAdminModal();
+    });
+    document.getElementById("admin-pass-input").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") confirmAdminDelete();
+      if (e.key === "Escape") closeAdminModal();
+    });
     document.getElementById("h2h-modal").addEventListener("click", (e) => {
       if (e.target === e.currentTarget) closeH2H();
     });
