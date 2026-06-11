@@ -181,6 +181,7 @@
   }
 
   // src/client/state.ts
+  var DEADLINE = (/* @__PURE__ */ new Date("2026-06-11T21:00:00Z")).getTime();
   var state = {
     name: "",
     email: "",
@@ -204,7 +205,6 @@
   function isReadOnly() {
     return state.locked || isPastDeadline() || state.isViewing;
   }
-  var DEADLINE = window.__DEADLINE_MS__;
 
   // src/client/api.ts
   async function apiFetch(path, opts) {

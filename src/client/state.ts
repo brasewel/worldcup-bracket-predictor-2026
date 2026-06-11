@@ -1,5 +1,8 @@
 import { GROUPS_DATA } from './data';
 
+// June 11, 2026 5:00 PM ET = 21:00 UTC
+export const DEADLINE: number = new Date('2026-06-11T21:00:00Z').getTime();
+
 export interface AppState {
   name: string;
   email: string;
@@ -40,10 +43,3 @@ export function isPastDeadline(): boolean {
 export function isReadOnly(): boolean {
   return state.locked || isPastDeadline() || state.isViewing;
 }
-
-// Injected by the worker into the HTML page via a script tag
-declare const __DEADLINE_MS__: number;
-declare const __GROUPS_JSON__: string;
-
-// We read these from the window globals set by the worker (see worker/routes/html.ts)
-export const DEADLINE: number = (window as any).__DEADLINE_MS__;
