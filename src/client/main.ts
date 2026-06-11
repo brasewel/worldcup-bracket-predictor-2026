@@ -358,6 +358,8 @@ declare global {
 }
 
 window.__app = {
+  renderAll,
+
   // bracket actions
   pickWinner: (round: string, matchIdx: number, team: string) => {
     pickWinner(round, matchIdx, team);

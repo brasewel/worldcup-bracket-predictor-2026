@@ -1607,6 +1607,7 @@
     }
   }
   window.__app = {
+    renderAll,
     // bracket actions
     pickWinner: (round, matchIdx, team) => {
       pickWinner(round, matchIdx, team);
