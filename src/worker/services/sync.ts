@@ -333,8 +333,23 @@ export async function syncMatchStats(env: Env): Promise<void> {
   for (let i = 0; i < goalStmts.length;  i += 20) await env.DB.batch(goalStmts.slice(i,  i + 20));
   for (let i = 0; i < cardStmts.length;  i += 20) await env.DB.batch(cardStmts.slice(i,  i + 20));
 
-  // ── Step 3: group standings (always, not match-dependent) ──────────────────
+  // ── Step 3: group standings + top scorer (always, not match-dependent) ─────
   await syncGroupStandings(env);
+  await syncTopScorer(env);
+}
+
+async function syncTopScorer(env: Env): Promise<void> {
+  const res = await fetch('https://api.football-data.org/v4/competitions/WC/scorers?season=2026&limit=1', {
+    headers: { 'X-Auth-Token': env.FOOTBALL_DATA_TOKEN },
+  });
+  if (!res.ok) return;
+  const data = await res.json() as { scorers?: Array<{ player: { name: string } }> };
+  const name = data.scorers?.[0]?.player?.name ?? null;
+  if (!name) return;
+  await env.DB.prepare(
+    `INSERT INTO config (key, value, updated_at) VALUES ('top_scorer', ?, ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
+  ).bind(name, Date.now()).run();
 }
 
 async function syncGroupStandings(env: Env): Promise<void> {

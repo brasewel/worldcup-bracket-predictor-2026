@@ -199,7 +199,7 @@ export async function handleApi(request: Request, env: Env): Promise<Response | 
 
   // GET /api/leaderboard
   if (path === '/api/leaderboard' && request.method === 'GET') {
-    const [matchRows, groupRows, bracketRows, scorePickRows, gbPickRows, gbScorers] = await Promise.all([
+    const [matchRows, groupRows, bracketRows, scorePickRows, gbPickRows, topScorerRow] = await Promise.all([
       env.DB.prepare(
         'SELECT match_num, home_team, away_team, home_score, away_score, status, winner FROM match_results WHERE status = ? ORDER BY match_num'
       ).bind('FINISHED').all<{ match_num: number; home_team: string; away_team: string; home_score: number | null; away_score: number | null; status: string; winner: string | null }>(),
@@ -211,9 +211,8 @@ export async function handleApi(request: Request, env: Env): Promise<Response | 
         .all<{ email: string; match_id: string; home_score: number; away_score: number }>(),
       env.DB.prepare('SELECT email, player_name FROM golden_boot_picks')
         .all<{ email: string; player_name: string }>(),
-      fetch('https://api.football-data.org/v4/competitions/WC/scorers?season=2026&limit=1', {
-        headers: { 'X-Auth-Token': env.FOOTBALL_DATA_TOKEN },
-      }).then(r => r.ok ? r.json() : { scorers: [] }).catch(() => ({ scorers: [] })) as Promise<{ scorers: Array<{ player: { name: string } }> }>,
+      env.DB.prepare('SELECT value FROM config WHERE key = ?')
+        .bind('top_scorer').first<{ value: string }>(),
     ]);
 
     const knockoutWinners: Record<number, string> = {};
@@ -233,7 +232,7 @@ export async function handleApi(request: Request, env: Env): Promise<Response | 
 
     const gbByEmail: Record<string, string> = {};
     for (const gb of gbPickRows.results) gbByEmail[gb.email] = gb.player_name;
-    const actualTopScorer = gbScorers.scorers?.[0]?.player?.name ?? null;
+    const actualTopScorer = topScorerRow?.value ?? null;
 
     const groupStandings: Record<string, string[]> = {};
     for (const r of groupRows.results) {
