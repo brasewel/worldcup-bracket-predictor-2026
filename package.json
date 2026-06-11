@@ -4,14 +4,18 @@
   "description": "FIFA World Cup 2026 bracket prediction app",
   "main": "src/index.ts",
   "scripts": {
-    "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
-    "db:migrate:local": "wrangler d1 execute worldcup-bracket-db --local --file=schema.sql",
-    "db:migrate:remote": "wrangler d1 execute worldcup-bracket-db --remote --file=schema.sql"
+    "build:client": "esbuild src/client/main.ts --bundle --outfile=src/public/client.js --target=es2020 --format=iife",
+    "build": "npm run build:client && wrangler deploy",
+    "dev": "concurrently \"esbuild src/client/main.ts --bundle --outfile=src/public/client.js --target=es2020 --format=iife --watch\" \"wrangler dev\"",
+    "deploy": "npm run build",
+    "db:migrate:local": "wrangler d1 migrations apply worldcup-bracket-db --local",
+    "db:migrate:remote": "wrangler d1 migrations apply worldcup-bracket-db --remote"
   },
   "devDependencies": {
-    "wrangler": "^3.0.0",
     "@cloudflare/workers-types": "^4.0.0",
-    "typescript": "^5.0.0"
+    "concurrently": "^10.0.3",
+    "esbuild": "^0.28.0",
+    "typescript": "^5.0.0",
+    "wrangler": "^3.0.0"
   }
 }

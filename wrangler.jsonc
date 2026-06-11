@@ -1,13 +1,17 @@
 {
   "name": "worldcup-bracket",
-  "main": "src/index.ts",
+  "main": "src/worker/index.ts",
   "compatibility_date": "2024-09-23",
   "account_id": "e0b9510c17084158904a6b96f1cf97e8",
+  "assets": {
+    "directory": "./src/public"
+  },
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "worldcup-bracket-db",
-      "database_id": "ab2d9196-96dc-40f3-b26a-658367953fa1"
+      "database_id": "ab2d9196-96dc-40f3-b26a-658367953fa1",
+      "migrations_dir": "migrations"
     }
   ],
   "triggers": {

@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>FIFA World Cup 2026 — Bracket Predictor</title>
+<link rel="stylesheet" href="/style.css"/>
+</head>
+<body>
+
+<!-- Password gate -->
+<div id="password-gate" style="display:none;position:fixed;inset:0;z-index:10000;background:linear-gradient(160deg,#0a0e1a 0%,#0d1425 60%,#0a0e1a 100%);align-items:center;justify-content:center;padding:20px;">
+  <div id="pass-card" style="background:var(--navy2);border:2px solid var(--gold);border-radius:18px;padding:40px 32px;max-width:380px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.7);">
+    <div style="font-size:3rem;margin-bottom:12px;">🏆</div>
+    <h2 style="color:var(--gold);font-size:1.4rem;font-weight:900;letter-spacing:3px;text-transform:uppercase;margin:0 0 4px;">FIFA World Cup 2026</h2>
+    <p style="color:var(--grey);font-size:0.75rem;letter-spacing:2px;text-transform:uppercase;margin:0 0 28px;">Private Group Predictor</p>
+    <p style="color:var(--white);font-size:0.9rem;margin:0 0 18px;opacity:0.8;">Enter the group password to access</p>
+    <input id="pass-input" type="password" placeholder="Group password" autocomplete="off"
+      style="width:100%;box-sizing:border-box;padding:14px 16px;border-radius:10px;border:2px solid var(--border);background:var(--navy3);color:var(--white);font-size:1rem;outline:none;margin-bottom:10px;text-align:center;letter-spacing:4px;" />
+    <div id="pass-error" style="display:none;color:#f87171;font-size:0.82rem;margin-bottom:10px;">Wrong password. Try again.</div>
+    <button id="pass-submit" style="width:100%;padding:15px;border-radius:10px;border:none;background:linear-gradient(135deg,var(--gold),var(--gold2));color:var(--navy);font-weight:900;font-size:1rem;letter-spacing:2px;text-transform:uppercase;cursor:pointer;">Enter</button>
+  </div>
+</div>
+
+<div id="app-root" style="display:none;">
+
+<header class="header">
+  <div class="header-inner">
+    <div class="header-brand">
+      <span class="trophy">🏆</span>
+      <div class="header-titles">
+        <h1>FIFA World Cup 2026</h1>
+        <p>Bracket Predictor</p>
+      </div>
+    </div>
+    <div class="host-flags">🇺🇸 🇨🇦 🇲🇽</div>
+    <div id="countdown-header">
+      <div>Picks close in</div>
+      <div class="time-big" id="countdown-text">...</div>
+    </div>
+  </div>
+</header>
+
+<div class="main">
+  <!-- ── Sidebar ── -->
+  <aside class="sidebar">
+    <div class="card" id="login-card">
+      <div class="card-title">Your Bracket</div>
+      <label class="input-label">Display Name</label>
+      <input type="text" id="input-name" class="input-field" placeholder="e.g. Bruno" maxlength="40"/>
+      <label class="input-label">Email (used to identify you)</label>
+      <input type="email" id="input-email" class="input-field" placeholder="you@example.com"/>
+      <button class="btn btn-gold" id="btn-load">Load / New Bracket</button>
+      <div id="load-error" style="color:var(--red);font-size:0.75rem;margin-top:8px;display:none;"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">All Predictions</div>
+      <div id="predictions-list" class="predictions-list">
+        <div style="color:var(--grey);font-size:0.8rem;">Loading...</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ── Main Content ── -->
+  <main class="content">
+    <!-- Tab navigation -->
+    <div class="tab-nav">
+      <button class="tab-btn tab-active" id="tab-bracket" data-tab="bracket">🏆 Bracket</button>
+      <button class="tab-btn" id="tab-schedule" data-tab="schedule">📅 Schedule</button>
+      <button class="tab-btn" id="tab-leaderboard" data-tab="leaderboard">🥇 Leaderboard</button>
+    </div>
+
+    <!-- Live score ticker -->
+    <div id="score-ticker" class="ticker-wrap" style="display:none"></div>
+
+    <div id="global-lock-banner">
+      🔒 Picks are locked — the tournament has started!
+    </div>
+
+    <div id="viewing-banner" class="viewing-banner" style="display:none">
+      <span>👁️</span>
+      <span id="viewing-text">Viewing bracket</span>
+      <button class="btn btn-outline" style="width:auto;padding:6px 14px;margin:0;flex-shrink:0;" id="btn-stop-viewing">Close</button>
+    </div>
+
+    <!-- Pre-login placeholder -->
+    <div id="pre-login-placeholder">
+      <div class="placeholder-box">
+        <div class="placeholder-trophy">🏆</div>
+        <h2>Ready to predict the 2026 World Cup?</h2>
+        <p>Enter your name and email in the sidebar, then hit <strong>Load / New Bracket</strong> to start filling in your picks.</p>
+        <div class="placeholder-steps">
+          <div class="placeholder-step"><span class="step-num">1</span> Enter your name &amp; email</div>
+          <div class="placeholder-step"><span class="step-num">2</span> Drag teams to set group standings</div>
+          <div class="placeholder-step"><span class="step-num">3</span> Pick winners through the knockout rounds</div>
+          <div class="placeholder-step"><span class="step-num">4</span> Save &amp; lock your picks before June 11, 5 PM ET</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bracket content — hidden until bracket is loaded -->
+    <div id="bracket-content" style="display:none">
+      <!-- Group Stage -->
+      <div id="group-stage-section">
+        <div class="section-header">
+          <div class="section-num">1</div>
+          <div>
+            <div class="section-title">Group Stage</div>
+            <div class="section-subtitle">Drag teams to set your predicted finishing order. Top 2 advance automatically.</div>
+          </div>
+        </div>
+        <div class="groups-grid" id="groups-grid"></div>
+      </div>
+
+      <!-- 3rd Place Qualifiers -->
+      <div id="third-place-section">
+        <div class="section-header">
+          <div class="section-num section-num-alt">1.5</div>
+          <div>
+            <div class="section-title">3rd Place Qualifiers</div>
+            <div class="section-subtitle">Pick which 3rd-place team you predict will advance in each match.</div>
+          </div>
+        </div>
+        <div class="rules-explainer">
+          <button class="rules-toggle" id="rules-toggle-btn">ℹ️ How does this work?</button>
+          <div class="rules-body" id="rules-body" style="display:none">
+            <p><strong>Only 8 of the 12 third-place teams advance</strong> — the other 4 go home.</p>
+            <p>FIFA pre-determined which 3rd-place teams can fill which bracket slots based on their group. For example, only a team finishing 3rd in Groups A, B, C, D, or F can go into Match 74 against the Winner of Group E. A 3rd-place team from Group G simply cannot appear there.</p>
+            <p>Each dropdown below only shows you the eligible groups for that particular slot, so you're always picking from the correct pool. Once the real tournament's group stage ends, FIFA slots in the actual qualifying teams automatically using this exact same system — no second draw needed.</p>
+          </div>
+        </div>
+        <div class="third-grid" id="third-grid"></div>
+      </div>
+
+      <!-- Knockout -->
+      <div class="section-header">
+        <div class="section-num" id="knockout-num">2</div>
+        <div>
+          <div class="section-title">Knockout Stage</div>
+          <div class="section-subtitle" id="knockout-subtitle">Click a team in each match to advance them to the next round.</div>
+        </div>
+      </div>
+      <div class="bracket-scroll">
+        <div class="bracket" id="bracket"></div>
+      </div>
+
+      <!-- Golden Boot -->
+      <div id="golden-boot-section" style="display:none;margin-top:32px">
+        <div class="section-header">
+          <div class="section-num" style="background:var(--gold);color:var(--navy)">⚽</div>
+          <div>
+            <div class="section-title">Golden Boot Predictor</div>
+            <div class="section-subtitle">Pick the tournament top scorer (+5 pts if correct)</div>
+          </div>
+        </div>
+        <div id="golden-boot-card" class="card" style="padding:16px">
+          <input type="text" id="gb-input" placeholder="Search player name..." class="score-input"
+            style="width:100%;font-size:0.9rem;padding:10px 12px;border-radius:8px;margin-bottom:10px"
+            autocomplete="off">
+          <div id="gb-suggestions" style="display:none;max-height:180px;overflow-y:auto;background:var(--navy2);border:1px solid var(--border);border-radius:8px;margin-bottom:10px"></div>
+          <div id="gb-current" style="font-size:0.82rem;color:var(--grey)">No pick yet</div>
+        </div>
+      </div>
+
+      <!-- Save bar -->
+      <div class="save-bar">
+        <div class="save-bar-inner" id="save-bar-inner">
+          <button class="save-main-btn" id="btn-save" disabled>💾 Save Draft</button>
+          <button class="confirm-btn" id="btn-confirm" disabled>✅ Confirm &amp; Lock My Picks</button>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- Leaderboard panel -->
+<div id="leaderboard-panel" style="display:none">
+  <div id="leaderboard-content"></div>
+</div>
+
+<!-- H2H modal -->
+<div id="h2h-modal" style="display:none">
+  <div class="h2h-box">
+    <div class="h2h-header">
+      <div>
+        <div class="h2h-title" id="h2h-title">Head-to-Head</div>
+        <div id="h2h-subtitle">Your picks vs theirs</div>
+      </div>
+      <button class="btn-h2h" id="h2h-close-btn" style="font-size:1rem;padding:6px 10px">✕</button>
+    </div>
+    <div id="h2h-content"><div style="color:var(--grey);font-size:0.85rem">Loading...</div></div>
+  </div>
+</div>
+
+<!-- Schedule panel -->
+<div id="schedule-panel" style="display:none">
+  <div id="schedule-login-notice" style="display:none" class="schedule-notice">
+    ℹ️ <strong>Load your bracket</strong> to make quick picks on each match.
+  </div>
+  <div id="schedule-days"></div>
+</div>
+
+<!-- Confirm modal -->
+<div class="modal-overlay" id="confirm-modal">
+  <div class="modal">
+    <h2>🔒 Lock Your Picks?</h2>
+    <p>Once you confirm, your bracket is <strong>permanently locked</strong> and cannot be changed. Make sure you're happy with every pick!</p>
+    <div class="modal-actions">
+      <button class="btn btn-outline" style="flex:1" id="modal-cancel-btn">Go Back</button>
+      <button class="btn btn-danger" style="flex:1" id="modal-confirm-btn">Yes, Lock It!</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+</div><!-- /app-root -->
+
+<script src="/client.js"></script>
+</body>
+</html>
