@@ -14,6 +14,7 @@ import { renderSchedule, makeMatchPick, submitScorePick, toggleMatchDetail } fro
 import {
   fetchLeaderboard, startLeaderboard, stopLeaderboard,
   renderLeaderboard, openH2H, closeH2H, copyStandings, lbData,
+  dismissUpset,
 } from './leaderboard';
 import { loadLiveResults } from './liveResults';
 import {
@@ -22,6 +23,8 @@ import {
 
 // ── Countdown ────────────────────────────────────────────────────────────────
 
+let deadlineWarningDismissed = false;
+
 function updateCountdown(): void {
   const el = document.getElementById('countdown-text')!;
   const header = document.getElementById('countdown-header')!;
@@ -29,7 +32,9 @@ function updateCountdown(): void {
     el.textContent = 'PICKS LOCKED';
     header.classList.add('locked');
     document.getElementById('global-lock-banner')!.classList.add('show');
+    document.getElementById('deadline-warning-banner')!.style.display = 'none';
     renderSaveBar();
+    renderPlaceholder();
     return;
   }
   const diff = DEADLINE - Date.now();
@@ -37,6 +42,46 @@ function updateCountdown(): void {
   const m = Math.floor((diff % 3600000) / 60000);
   const s = Math.floor((diff % 60000) / 1000);
   el.textContent = h + 'h ' + String(m).padStart(2, '0') + 'm ' + String(s).padStart(2, '0') + 's';
+  renderDeadlineWarning(diff);
+}
+
+function renderDeadlineWarning(diffMs: number): void {
+  const banner = document.getElementById('deadline-warning-banner')!;
+  const twoHours = 2 * 60 * 60 * 1000;
+  if (!deadlineWarningDismissed && diffMs > 0 && diffMs < twoHours && state.bracketLoaded && !state.locked && !state.isViewing) {
+    banner.style.display = 'flex';
+  } else {
+    banner.style.display = 'none';
+  }
+}
+
+function dismissDeadlineWarning(): void {
+  deadlineWarningDismissed = true;
+  document.getElementById('deadline-warning-banner')!.style.display = 'none';
+}
+
+function scrollToSaveBar(): void {
+  dismissDeadlineWarning();
+  const bar = document.getElementById('save-bar-inner');
+  if (bar) {
+    bar.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    bar.classList.add('highlight-pulse');
+    setTimeout(() => bar.classList.remove('highlight-pulse'), 1500);
+  }
+}
+
+// ── Placeholder (pre-login) ───────────────────────────────────────────────────
+
+function renderPlaceholder(): void {
+  const pre = document.getElementById('placeholder-box-pre')!;
+  const live = document.getElementById('placeholder-box-live')!;
+  if (isPastDeadline()) {
+    pre.style.display = 'none';
+    live.style.display = 'block';
+  } else {
+    pre.style.display = 'block';
+    live.style.display = 'none';
+  }
 }
 
 // ── Predictions list ─────────────────────────────────────────────────────────
@@ -152,6 +197,8 @@ async function viewBracket(email: string, displayName: string): Promise<void> {
     document.getElementById('viewing-banner')!.style.display = 'flex';
     document.getElementById('viewing-text')!.textContent =
       'Viewing ' + displayName + '\u2019s bracket' + (state.locked ? ' \uD83D\uDD12' : '');
+    const shareBtnEl = document.getElementById('btn-share-bracket');
+    if (shareBtnEl) shareBtnEl.setAttribute('data-share-email', email);
 
     document.querySelectorAll('.prediction-item').forEach(el => el.classList.remove('active'));
     const match = Array.from(document.querySelectorAll<HTMLElement>('.prediction-item')).find(el => el.dataset.email === email);
@@ -270,6 +317,28 @@ function loadOtherBracketFromEmail(email: string, name: string): void {
   viewBracket(email, name);
 }
 
+function shareMyBracket(): void {
+  const email = state.isViewing
+    ? (document.getElementById('btn-share-bracket')?.getAttribute('data-share-email') ?? state.email)
+    : state.email;
+  if (!email) return;
+  const url = location.origin + location.pathname + '?view=' + encodeURIComponent(email);
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(url).then(() => showToast('\uD83D\uDD17 Link copied! Share it with your group.', 'success'));
+  } else {
+    prompt('Share this bracket link:', url);
+  }
+}
+
+function scrollToSidebar(): void {
+  const sidebar = document.querySelector('.sidebar');
+  if (sidebar) sidebar.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function switchTabPublic(tab: string): void {
+  switchTab(tab);
+}
+
 // ── Tab switching ─────────────────────────────────────────────────────────────
 
 function switchTab(tab: string): void {
@@ -382,6 +451,11 @@ window.__app = {
   viewBracket,
   stopViewing,
   loadOtherBracketFromEmail,
+  switchTabPublic,
+  scrollToSidebar,
+  scrollToSaveBar,
+  dismissDeadlineWarning,
+  shareMyBracket,
 
   // schedule
   makeMatchPick,
@@ -393,6 +467,7 @@ window.__app = {
   openH2H,
   closeH2H,
   copyStandings,
+  dismissUpset,
 
   // golden boot
   filterGbPlayers,
@@ -412,6 +487,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Stop viewing button
   document.getElementById('btn-stop-viewing')!.addEventListener('click', stopViewing);
+
+  // Share bracket button (in viewing banner)
+  document.getElementById('btn-share-bracket')!.addEventListener('click', shareMyBracket);
 
   // Rules toggle
   document.getElementById('rules-toggle-btn')!.addEventListener('click', toggleRules);
@@ -445,4 +523,16 @@ document.addEventListener('DOMContentLoaded', () => {
   // Init: load live results for ticker, then check password
   loadLiveResults().then(renderTicker);
   checkPassword();
+  renderPlaceholder();
+
+  // Handle ?view=email shareable link
+  const viewParam = new URLSearchParams(location.search).get('view');
+  if (viewParam) {
+    apiFetch<{ bracket: { display_name: string } }>('/api/brackets/' + encodeURIComponent(viewParam))
+      .then(data => {
+        viewBracket(viewParam, data.bracket.display_name);
+        switchTab('bracket');
+      })
+      .catch(() => { /* invalid link, ignore */ });
+  }
 });

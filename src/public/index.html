@@ -81,12 +81,20 @@
     <div id="viewing-banner" class="viewing-banner" style="display:none">
       <span>👁️</span>
       <span id="viewing-text">Viewing bracket</span>
+      <button class="btn btn-outline" style="width:auto;padding:6px 14px;margin:0;flex-shrink:0;" id="btn-share-bracket" data-share-email="">🔗 Share</button>
       <button class="btn btn-outline" style="width:auto;padding:6px 14px;margin:0;flex-shrink:0;" id="btn-stop-viewing">Close</button>
+    </div>
+
+    <!-- Deadline warning banner (shown < 2h before deadline) -->
+    <div id="deadline-warning-banner" style="display:none" class="deadline-warning-banner">
+      <span>⚠️ Under 2 hours left — your bracket isn't locked yet!</span>
+      <button class="dw-lock-btn" onclick="window.__app.scrollToSaveBar()">Lock now →</button>
+      <button class="dw-dismiss-btn" onclick="window.__app.dismissDeadlineWarning()">✕</button>
     </div>
 
     <!-- Pre-login placeholder -->
     <div id="pre-login-placeholder">
-      <div class="placeholder-box">
+      <div class="placeholder-box" id="placeholder-box-pre">
         <div class="placeholder-trophy">🏆</div>
         <h2>Ready to predict the 2026 World Cup?</h2>
         <p>Enter your name and email in the sidebar, then hit <strong>Load / New Bracket</strong> to start filling in your picks.</p>
@@ -96,6 +104,16 @@
           <div class="placeholder-step"><span class="step-num">3</span> Pick winners through the knockout rounds</div>
           <div class="placeholder-step"><span class="step-num">4</span> Save &amp; lock your picks before June 11, 5 PM ET</div>
         </div>
+      </div>
+      <div class="placeholder-box placeholder-live" id="placeholder-box-live" style="display:none">
+        <div class="placeholder-trophy">⚽</div>
+        <h2>The 2026 World Cup is underway!</h2>
+        <p>Picks are locked. Track who's winning and browse everyone's bracket.</p>
+        <div class="placeholder-live-btns">
+          <button class="btn btn-gold placeholder-live-btn" onclick="window.__app.switchTabPublic('leaderboard')">🥇 View Leaderboard</button>
+          <button class="btn btn-outline placeholder-live-btn" onclick="window.__app.scrollToSidebar()">👥 Browse Brackets</button>
+        </div>
+        <p class="placeholder-live-sub">Enter your name &amp; email above to load your bracket and see your picks.</p>
       </div>
     </div>
 
@@ -176,7 +194,10 @@
 
 <!-- Leaderboard panel -->
 <div id="leaderboard-panel" style="display:none">
+  <div id="upset-alert-container"></div>
   <div id="leaderboard-content"></div>
+  <div id="score-graph-container"></div>
+  <div id="consensus-insights-container"></div>
 </div>
 
 <!-- H2H modal -->

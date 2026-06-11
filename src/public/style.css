@@ -753,6 +753,104 @@ body {
   .modal-actions { flex-direction: column; }
 }
 
+/* ── Deadline warning banner ── */
+.deadline-warning-banner {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  background: linear-gradient(135deg, rgba(245,158,11,0.18), rgba(245,158,11,0.08));
+  border: 1px solid var(--amber);
+  border-radius: 10px; padding: 12px 16px; margin: 0 0 12px;
+  font-size: 0.88rem; color: var(--amber);
+}
+.deadline-warning-banner span { flex: 1; min-width: 200px; }
+.dw-lock-btn {
+  background: var(--amber); color: var(--navy); border: none;
+  border-radius: 7px; padding: 6px 14px; font-weight: 700;
+  font-size: 0.82rem; cursor: pointer; white-space: nowrap;
+}
+.dw-lock-btn:hover { opacity: 0.85; }
+.dw-dismiss-btn {
+  background: none; border: none; color: var(--amber);
+  font-size: 1rem; cursor: pointer; padding: 2px 6px; opacity: 0.7;
+}
+.dw-dismiss-btn:hover { opacity: 1; }
+
+/* ── Post-deadline placeholder ── */
+.placeholder-live {
+  border-color: var(--gold2);
+  background: linear-gradient(160deg, rgba(245,197,24,0.06), transparent 60%);
+}
+.placeholder-live h2 { color: var(--gold); }
+.placeholder-live-btns {
+  display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;
+  margin: 20px 0 12px;
+}
+.placeholder-live-btn { min-width: 160px; }
+.placeholder-live-sub { font-size: 0.78rem; color: var(--grey); margin-top: 8px; }
+
+/* ── Highlight pulse (save bar) ── */
+@keyframes highlightPulse {
+  0%   { box-shadow: 0 0 0 0 rgba(245,197,24,0.7); }
+  70%  { box-shadow: 0 0 0 10px rgba(245,197,24,0); }
+  100% { box-shadow: 0 0 0 0 rgba(245,197,24,0); }
+}
+.highlight-pulse { animation: highlightPulse 0.8s ease 2; }
+
+/* ── Upset alert ── */
+.upset-alert {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  background: linear-gradient(135deg, rgba(239,68,68,0.15), rgba(239,68,68,0.06));
+  border: 1px solid rgba(239,68,68,0.45);
+  border-radius: 10px; padding: 12px 16px; margin-bottom: 10px;
+  font-size: 0.88rem;
+}
+.upset-emoji { font-size: 1.4rem; }
+.upset-text { flex: 1; min-width: 180px; line-height: 1.4; }
+.upset-dismiss {
+  background: none; border: none; color: var(--grey);
+  font-size: 1rem; cursor: pointer; padding: 2px 6px;
+}
+.upset-dismiss:hover { color: var(--white); }
+
+/* ── Score graph ── */
+.graph-section {
+  background: var(--card-bg); border: 1px solid var(--border);
+  border-radius: 12px; padding: 20px; margin: 20px 0;
+}
+.graph-wrap { overflow-x: auto; }
+.graph-legend {
+  display: flex; flex-wrap: wrap; gap: 8px 16px;
+  margin-top: 10px;
+}
+.graph-legend-item {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 0.75rem; color: var(--grey);
+}
+
+/* ── Consensus insights ── */
+.consensus-section {
+  background: var(--card-bg); border: 1px solid var(--border);
+  border-radius: 12px; padding: 20px; margin: 20px 0;
+}
+.consensus-subsection { margin-bottom: 16px; }
+.consensus-subsection:last-child { margin-bottom: 0; }
+.consensus-sub-title {
+  font-size: 0.78rem; font-weight: 700; color: var(--gold);
+  letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 8px;
+}
+.consensus-bar-row {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
+}
+.consensus-bar-label { width: 150px; font-size: 0.8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.consensus-bar-track {
+  flex: 1; height: 10px; background: var(--navy3); border-radius: 5px; overflow: hidden;
+}
+.consensus-bar-fill {
+  height: 100%; background: linear-gradient(90deg, var(--gold2), var(--gold));
+  border-radius: 5px; transition: width 0.4s ease;
+}
+.consensus-bar-pct { font-size: 0.75rem; color: var(--grey); white-space: nowrap; min-width: 40px; text-align: right; }
+.consensus-split-text { font-size: 0.85rem; color: var(--white); line-height: 1.5; }
+
 /* ── Small phones (≤420px) ── */
 @media (max-width: 420px) {
   .header-titles h1 { font-size: 0.95rem; }

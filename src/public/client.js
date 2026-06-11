@@ -1110,8 +1110,16 @@
   var lbPollTimer;
   async function fetchLeaderboard() {
     try {
-      lbData = await apiFetch("/api/leaderboard");
+      const [lb, consensus, resultsData] = await Promise.all([
+        apiFetch("/api/leaderboard"),
+        apiFetch("/api/consensus").catch(() => null),
+        apiFetch("/api/match-results").catch(() => null)
+      ]);
+      lbData = lb;
       renderLeaderboard();
+      renderScoreGraph();
+      if (consensus) renderConsensusInsights(consensus);
+      if (consensus && resultsData) checkForUpsets(consensus, resultsData.results);
     } catch {
       document.getElementById("leaderboard-content").innerHTML = '<div class="lb-empty">Could not load leaderboard. Try again shortly.</div>';
     }
@@ -1289,6 +1297,225 @@
   function closeH2H() {
     document.getElementById("h2h-modal").style.display = "none";
   }
+  var GRAPH_COLORS = [
+    "#f5c518",
+    "#22c55e",
+    "#3b82f6",
+    "#f97316",
+    "#a855f7",
+    "#ec4899",
+    "#14b8a6",
+    "#ef4444",
+    "#84cc16",
+    "#06b6d4",
+    "#8b5cf6",
+    "#fb923c"
+  ];
+  function renderScoreGraph() {
+    const container = document.getElementById("score-graph-container");
+    if (!container || !lbData || !lbData.has_any_finished) {
+      if (container) container.innerHTML = "";
+      return;
+    }
+    const { leaderboard } = lbData;
+    if (!leaderboard.length) return;
+    const allMatchNums = Array.from(new Set(
+      leaderboard.flatMap((e) => e.picks.filter((p) => p.correct !== null).map((p) => p.matchNum))
+    )).sort((a, b) => a - b);
+    if (!allMatchNums.length) return;
+    const ROUND_PTS = { r32: 2, r16: 3, qf: 4, sf: 5, final: 8 };
+    const series = leaderboard.map((e, idx) => {
+      const pickMap = {};
+      for (const p of e.picks) {
+        if (p.correct === true) pickMap[p.matchNum] = true;
+      }
+      let cum = 0;
+      const points = allMatchNums.map((mn) => {
+        const pick = e.picks.find((p) => p.matchNum === mn);
+        if (pick?.correct === true) cum += ROUND_PTS[pick.round] ?? 0;
+        return cum;
+      });
+      return { name: e.display_name, email: e.email, points, color: GRAPH_COLORS[idx % GRAPH_COLORS.length] };
+    });
+    const W = Math.min(container.clientWidth || 700, 900);
+    const H = 200;
+    const PAD = { top: 16, right: 16, bottom: 28, left: 36 };
+    const gW = W - PAD.left - PAD.right;
+    const gH = H - PAD.top - PAD.bottom;
+    const maxScore = Math.max(...series.flatMap((s) => s.points), 1);
+    const xScale = (i) => PAD.left + i / Math.max(allMatchNums.length - 1, 1) * gW;
+    const yScale = (v) => PAD.top + gH - v / maxScore * gH;
+    const meEmail = state.email;
+    const paths = series.map((s) => {
+      const isMe = s.email === meEmail;
+      const d = s.points.map((v, i) => (i === 0 ? "M" : "L") + xScale(i).toFixed(1) + "," + yScale(v).toFixed(1)).join(" ");
+      return `<path d="${d}" fill="none" stroke="${isMe ? "var(--gold)" : s.color}" stroke-width="${isMe ? 3 : 1.5}" opacity="${isMe ? 1 : 0.55}" class="graph-line" data-name="${escHtml(s.name)}"/>`;
+    }).join("");
+    const yLabels = [0, Math.round(maxScore / 2), maxScore].map(
+      (v) => `<text x="${PAD.left - 4}" y="${yScale(v).toFixed(1)}" text-anchor="end" dominant-baseline="middle" fill="var(--grey)" font-size="10">${v}</text>`
+    ).join("");
+    const xLabel = `<text x="${PAD.left + gW / 2}" y="${H - 4}" text-anchor="middle" fill="var(--grey)" font-size="10">${allMatchNums.length} match${allMatchNums.length !== 1 ? "es" : ""} played</text>`;
+    const legendItems = series.map((s) => {
+      const isMe = s.email === meEmail;
+      return `<span class="graph-legend-item"><svg width="16" height="8"><line x1="0" y1="4" x2="16" y2="4" stroke="${isMe ? "var(--gold)" : s.color}" stroke-width="${isMe ? 3 : 1.5}"/></svg>${escHtml(s.name)}${isMe ? " (you)" : ""}</span>`;
+    }).join("");
+    container.innerHTML = `
+    <div class="graph-section">
+      <div class="my-picks-title" style="margin-bottom:12px">Score race</div>
+      <div class="graph-wrap">
+        <svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto">
+          <line x1="${PAD.left}" y1="${PAD.top}" x2="${PAD.left}" y2="${PAD.top + gH}" stroke="var(--border)" stroke-width="1"/>
+          <line x1="${PAD.left}" y1="${PAD.top + gH}" x2="${PAD.left + gW}" y2="${PAD.top + gH}" stroke="var(--border)" stroke-width="1"/>
+          ${yLabels}
+          ${xLabel}
+          ${paths}
+        </svg>
+      </div>
+      <div class="graph-legend">${legendItems}</div>
+    </div>`;
+  }
+  function renderConsensusInsights(consensus) {
+    const container = document.getElementById("consensus-insights-container");
+    if (!container) return;
+    const { total_players, picks } = consensus;
+    if (!total_players) {
+      container.innerHTML = "";
+      return;
+    }
+    const finalPicks = picks["final_0"] ?? {};
+    const sortedChampion = Object.entries(finalPicks).sort((a, b) => b[1] - a[1]);
+    let championHtml = "";
+    if (sortedChampion.length) {
+      const bars = sortedChampion.map(([team, cnt]) => {
+        const pct = Math.round(cnt / total_players * 100);
+        const isMe = state.knockout?.["final_0"] === team;
+        return `<div class="consensus-bar-row">
+        <span class="consensus-bar-label">${getFlagForTeam(team)} ${escHtml(team)}${isMe ? ' <span class="lb-you-badge">you</span>' : ""}</span>
+        <div class="consensus-bar-track"><div class="consensus-bar-fill" style="width:${pct}%"></div></div>
+        <span class="consensus-bar-pct">${cnt}/${total_players}</span>
+      </div>`;
+      }).join("");
+      championHtml = `<div class="consensus-subsection"><div class="consensus-sub-title">\u{1F3C6} Champion picks</div>${bars}</div>`;
+    }
+    let contrarianHtml = "";
+    let mostSplit = 0;
+    let splitKey = "";
+    let splitTeam = "";
+    let splitCnt = 0;
+    for (const [key, teamMap] of Object.entries(picks)) {
+      const total = Object.values(teamMap).reduce((a, b) => a + b, 0);
+      if (total < 2) continue;
+      for (const [team, cnt] of Object.entries(teamMap)) {
+        const pct = cnt / total;
+        const splitness = 1 - Math.abs(0.5 - pct) * 2;
+        if (splitness > mostSplit) {
+          mostSplit = splitness;
+          splitKey = key;
+          splitTeam = team;
+          splitCnt = cnt;
+        }
+      }
+    }
+    if (splitKey && mostSplit > 0.6) {
+      const [round, idxStr] = splitKey.split("_");
+      const roundLabel = ROUND_LABELS_SHORT[round] ?? round;
+      const otherEntries = Object.entries(picks[splitKey]).filter(([t]) => t !== splitTeam);
+      const otherTeam = otherEntries.sort((a, b) => b[1] - a[1])[0];
+      const pct = Math.round(splitCnt / total_players * 100);
+      contrarianHtml = `<div class="consensus-subsection">
+      <div class="consensus-sub-title">\u26A1 Most debated pick (${roundLabel} match ${Number(idxStr) + 1})</div>
+      <div class="consensus-split-text">
+        ${getFlagForTeam(splitTeam)} <strong>${escHtml(splitTeam)}</strong> \u2014 ${splitCnt}/${total_players} (${pct}%)
+        ${otherTeam ? ` vs ${getFlagForTeam(otherTeam[0])} <strong>${escHtml(otherTeam[0])}</strong> \u2014 ${otherTeam[1]}/${total_players}` : ""}
+      </div>
+    </div>`;
+    }
+    let agreesHtml = "";
+    if (state.email && state.knockout?.["final_0"]) {
+      const myChamp = state.knockout["final_0"];
+      const agreedCnt = finalPicks[myChamp] ?? 0;
+      const others = agreedCnt - 1;
+      if (others >= 0) {
+        agreesHtml = `<div class="consensus-subsection">
+        <div class="consensus-sub-title">\u{1F91D} Your champion: ${getFlagForTeam(myChamp)} ${escHtml(myChamp)}</div>
+        <div class="consensus-split-text">${others === 0 ? "Only you picked this! Bold call." : others === 1 ? "1 other person agrees with you." : others + " others agree with you."}</div>
+      </div>`;
+      }
+    }
+    if (!championHtml && !contrarianHtml && !agreesHtml) {
+      container.innerHTML = "";
+      return;
+    }
+    container.innerHTML = `<div class="consensus-section">
+    <div class="my-picks-title" style="margin-bottom:12px">Group consensus</div>
+    ${championHtml}
+    ${contrarianHtml}
+    ${agreesHtml}
+  </div>`;
+  }
+  var KNOCKOUT_MATCH_NUMS = {
+    r32: Array.from({ length: 16 }, (_, i) => 73 + i),
+    r16: Array.from({ length: 8 }, (_, i) => 89 + i),
+    qf: Array.from({ length: 4 }, (_, i) => 97 + i),
+    sf: Array.from({ length: 2 }, (_, i) => 101 + i),
+    final: [104]
+  };
+  function matchNumToRoundKey(mn) {
+    for (const [r, nums] of Object.entries(KNOCKOUT_MATCH_NUMS)) {
+      if (nums.includes(mn)) return r;
+    }
+    return "";
+  }
+  function checkForUpsets(consensus, results) {
+    const container = document.getElementById("upset-alert-container");
+    if (!container) return;
+    const { total_players, picks } = consensus;
+    if (!total_players) return;
+    const dismissed = JSON.parse(sessionStorage.getItem("wc26_upsets_dismissed") ?? "[]");
+    const upsets = [];
+    for (const match of results) {
+      if (match.status !== "FINISHED" || !match.home_team || !match.away_team) continue;
+      const mn = match.match_num;
+      if (mn < 73) continue;
+      if (dismissed.includes(mn)) continue;
+      const roundKey = matchNumToRoundKey(mn);
+      if (!roundKey) continue;
+      const matchIdx = KNOCKOUT_MATCH_NUMS[roundKey].indexOf(mn);
+      if (matchIdx === -1) continue;
+      const pickKey = roundKey + "_" + matchIdx;
+      const teamPicks = picks[pickKey] ?? {};
+      const winner = Object.entries(teamPicks).sort((a, b) => b[1] - a[1])[0];
+      if (!winner) continue;
+      const actualWinner = match.home_score !== null && match.away_score !== null ? match.home_score > match.away_score ? match.home_team : match.away_team : null;
+      if (!actualWinner) continue;
+      const calledBy = teamPicks[actualWinner] ?? 0;
+      const pct = calledBy / total_players;
+      if (pct < 0.33) {
+        const loser = actualWinner === match.home_team ? match.away_team : match.home_team;
+        upsets.push({ matchNum: mn, winner: actualWinner, loser, calledBy, pct });
+      }
+    }
+    if (!upsets.length) {
+      container.innerHTML = "";
+      return;
+    }
+    const html = upsets.map((u) => {
+      const pctStr = Math.round(u.pct * 100) + "%";
+      return `<div class="upset-alert" data-match="${u.matchNum}">
+      <span class="upset-emoji">\u{1F631}</span>
+      <span class="upset-text">Upset! ${getFlagForTeam(u.winner)} <strong>${escHtml(u.winner)}</strong> beat ${getFlagForTeam(u.loser)} ${escHtml(u.loser)} \u2014 only ${u.calledBy}/${total_players} (${pctStr}) of your group called it!</span>
+      <button class="upset-dismiss" onclick="window.__app.dismissUpset(${u.matchNum})">\u2715</button>
+    </div>`;
+    }).join("");
+    container.innerHTML = html;
+  }
+  function dismissUpset(matchNum) {
+    const dismissed = JSON.parse(sessionStorage.getItem("wc26_upsets_dismissed") ?? "[]");
+    if (!dismissed.includes(matchNum)) dismissed.push(matchNum);
+    sessionStorage.setItem("wc26_upsets_dismissed", JSON.stringify(dismissed));
+    const el = document.querySelector(`.upset-alert[data-match="${matchNum}"]`);
+    if (el) el.remove();
+  }
   function copyStandings() {
     if (!lbData || !lbData.leaderboard.length) {
       showToast("No standings yet", "error");
@@ -1315,6 +1542,7 @@
   }
 
   // src/client/main.ts
+  var deadlineWarningDismissed = false;
   function updateCountdown() {
     const el = document.getElementById("countdown-text");
     const header = document.getElementById("countdown-header");
@@ -1322,7 +1550,9 @@
       el.textContent = "PICKS LOCKED";
       header.classList.add("locked");
       document.getElementById("global-lock-banner").classList.add("show");
+      document.getElementById("deadline-warning-banner").style.display = "none";
       renderSaveBar();
+      renderPlaceholder();
       return;
     }
     const diff = DEADLINE - Date.now();
@@ -1330,6 +1560,40 @@
     const m = Math.floor(diff % 36e5 / 6e4);
     const s = Math.floor(diff % 6e4 / 1e3);
     el.textContent = h + "h " + String(m).padStart(2, "0") + "m " + String(s).padStart(2, "0") + "s";
+    renderDeadlineWarning(diff);
+  }
+  function renderDeadlineWarning(diffMs) {
+    const banner = document.getElementById("deadline-warning-banner");
+    const twoHours = 2 * 60 * 60 * 1e3;
+    if (!deadlineWarningDismissed && diffMs > 0 && diffMs < twoHours && state.bracketLoaded && !state.locked && !state.isViewing) {
+      banner.style.display = "flex";
+    } else {
+      banner.style.display = "none";
+    }
+  }
+  function dismissDeadlineWarning() {
+    deadlineWarningDismissed = true;
+    document.getElementById("deadline-warning-banner").style.display = "none";
+  }
+  function scrollToSaveBar() {
+    dismissDeadlineWarning();
+    const bar = document.getElementById("save-bar-inner");
+    if (bar) {
+      bar.scrollIntoView({ behavior: "smooth", block: "center" });
+      bar.classList.add("highlight-pulse");
+      setTimeout(() => bar.classList.remove("highlight-pulse"), 1500);
+    }
+  }
+  function renderPlaceholder() {
+    const pre = document.getElementById("placeholder-box-pre");
+    const live = document.getElementById("placeholder-box-live");
+    if (isPastDeadline()) {
+      pre.style.display = "none";
+      live.style.display = "block";
+    } else {
+      pre.style.display = "block";
+      live.style.display = "none";
+    }
   }
   async function loadPredictionsList() {
     try {
@@ -1436,6 +1700,8 @@
       state.locked = !!data.bracket.locked;
       document.getElementById("viewing-banner").style.display = "flex";
       document.getElementById("viewing-text").textContent = "Viewing " + displayName + "\u2019s bracket" + (state.locked ? " \u{1F512}" : "");
+      const shareBtnEl = document.getElementById("btn-share-bracket");
+      if (shareBtnEl) shareBtnEl.setAttribute("data-share-email", email);
       document.querySelectorAll(".prediction-item").forEach((el) => el.classList.remove("active"));
       const match = Array.from(document.querySelectorAll(".prediction-item")).find((el) => el.dataset.email === email);
       if (match) match.classList.add("active");
@@ -1541,6 +1807,23 @@
     switchTab("bracket");
     viewBracket(email, name);
   }
+  function shareMyBracket() {
+    const email = state.isViewing ? document.getElementById("btn-share-bracket")?.getAttribute("data-share-email") ?? state.email : state.email;
+    if (!email) return;
+    const url = location.origin + location.pathname + "?view=" + encodeURIComponent(email);
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(url).then(() => showToast("\u{1F517} Link copied! Share it with your group.", "success"));
+    } else {
+      prompt("Share this bracket link:", url);
+    }
+  }
+  function scrollToSidebar() {
+    const sidebar = document.querySelector(".sidebar");
+    if (sidebar) sidebar.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+  function switchTabPublic(tab) {
+    switchTab(tab);
+  }
   function switchTab(tab) {
     const isBracket = tab === "bracket";
     const isSchedule = tab === "schedule";
@@ -1629,6 +1912,11 @@
     viewBracket,
     stopViewing,
     loadOtherBracketFromEmail,
+    switchTabPublic,
+    scrollToSidebar,
+    scrollToSaveBar,
+    dismissDeadlineWarning,
+    shareMyBracket,
     // schedule
     makeMatchPick,
     submitScorePick,
@@ -1638,6 +1926,7 @@
     openH2H,
     closeH2H,
     copyStandings,
+    dismissUpset,
     // golden boot
     filterGbPlayers,
     selectGbPlayer
@@ -1648,6 +1937,7 @@
     });
     document.getElementById("btn-load").addEventListener("click", handleLoad);
     document.getElementById("btn-stop-viewing").addEventListener("click", stopViewing);
+    document.getElementById("btn-share-bracket").addEventListener("click", shareMyBracket);
     document.getElementById("rules-toggle-btn").addEventListener("click", toggleRules);
     document.getElementById("pass-input").addEventListener("keydown", (e) => {
       if (e.key === "Enter") submitPassword();
@@ -1667,5 +1957,14 @@
     updateCountdown();
     loadLiveResults().then(renderTicker);
     checkPassword();
+    renderPlaceholder();
+    const viewParam = new URLSearchParams(location.search).get("view");
+    if (viewParam) {
+      apiFetch("/api/brackets/" + encodeURIComponent(viewParam)).then((data) => {
+        viewBracket(viewParam, data.bracket.display_name);
+        switchTab("bracket");
+      }).catch(() => {
+      });
+    }
   });
 })();
