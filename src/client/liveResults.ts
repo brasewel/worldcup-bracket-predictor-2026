@@ -7,6 +7,8 @@ interface LiveResultRow {
   home_score: number | null;
   away_score: number | null;
   status: string;
+  match_minute: number | null;
+  match_injury: number | null;
 }
 
 const liveResults: Record<number, LiveResultRow> = {};
@@ -26,11 +28,21 @@ export function getLiveTeams(matchNum: number): {
   homeScore: number | null;
   awayScore: number | null;
   status: string;
+  matchMinute: number | null;
+  matchInjury: number | null;
 } | null {
   const r = liveResults[matchNum];
   if (!r) return null;
   if (r.home_team && r.away_team) {
-    return { home: r.home_team, away: r.away_team, homeScore: r.home_score, awayScore: r.away_score, status: r.status };
+    return {
+      home: r.home_team,
+      away: r.away_team,
+      homeScore: r.home_score,
+      awayScore: r.away_score,
+      status: r.status,
+      matchMinute: r.match_minute ?? null,
+      matchInjury: r.match_injury ?? null,
+    };
   }
   return null;
 }

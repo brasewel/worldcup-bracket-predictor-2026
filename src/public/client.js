@@ -700,7 +700,15 @@
     const r = liveResults[matchNum];
     if (!r) return null;
     if (r.home_team && r.away_team) {
-      return { home: r.home_team, away: r.away_team, homeScore: r.home_score, awayScore: r.away_score, status: r.status };
+      return {
+        home: r.home_team,
+        away: r.away_team,
+        homeScore: r.home_score,
+        awayScore: r.away_score,
+        status: r.status,
+        matchMinute: r.match_minute ?? null,
+        matchInjury: r.match_injury ?? null
+      };
     }
     return null;
   }
@@ -861,7 +869,13 @@
     if (live && live.homeScore !== null && live.awayScore !== null) {
       const isLive = live.status === "IN_PLAY" || live.status === "PAUSED" || live.status === "HALFTIME";
       const color = isLive ? "#ef4444" : "var(--gold)";
-      scoreBadge = ` <span style="color:${color};font-weight:900;font-size:1rem;margin:0 6px">${live.homeScore}\u2013${live.awayScore}${isLive ? " \u{1F534}" : ""}</span>`;
+      let clockStr = "";
+      if (isLive && live.matchMinute !== null) {
+        clockStr = live.matchInjury ? ` \u{1F534} ${live.matchMinute}+${live.matchInjury}'` : ` \u{1F534} ${live.matchMinute}'`;
+      } else if (isLive) {
+        clockStr = " \u{1F534}";
+      }
+      scoreBadge = ` <span style="color:${color};font-weight:900;font-size:1rem;margin:0 6px">${live.homeScore}\u2013${live.awayScore}${clockStr}</span>`;
     }
     let teamsHtml;
     if (!teamsKnown) {
@@ -973,6 +987,21 @@
       schedulePollTimer = void 0;
     }
   }
+  function statBarHtml(label, home, away, suffix = "") {
+    if (home === null || away === null) return "";
+    const total = home + away;
+    const homePct = total > 0 ? Math.round(home / total * 100) : 50;
+    const awayPct = 100 - homePct;
+    return `<div class="stat-row">
+    <span class="stat-val">${home}${suffix}</span>
+    <div class="stat-bars">
+      <div class="stat-bar-home" style="width:${homePct}%"></div>
+      <div class="stat-bar-away" style="width:${awayPct}%"></div>
+    </div>
+    <span class="stat-val stat-val--right">${away}${suffix}</span>
+    <span class="stat-label">${label}</span>
+  </div>`;
+  }
   async function toggleMatchDetail(matchId) {
     const panel = document.getElementById("match-detail-" + matchId);
     if (!panel) return;
@@ -984,7 +1013,7 @@
     panel.style.display = "block";
     try {
       const data = await apiFetch("/api/match-events/" + matchId);
-      const { events, match, goals } = data;
+      const { events, match, goals, cards } = data;
       const ht = match && match.home_score_ht !== null ? `HT: ${match.home_score_ht}\u2013${match.away_score_ht}` : "";
       let html = "";
       if (match && match.status === "FINISHED") {
@@ -998,9 +1027,10 @@
           const scorer = g.scorer_name ?? "Unknown";
           const team = g.team_name ? `<span style="color:var(--grey);font-size:0.7rem">(${escHtml(g.team_name)})</span>` : "";
           const typeLabel = g.goal_type === "OWN" ? ' <span class="goal-type-badge">OG</span>' : g.goal_type === "PENALTY" ? ' <span class="goal-type-badge">PEN</span>' : "";
+          const assistLine = g.assist_name ? `<div class="goal-assist">\u21B3 ${escHtml(g.assist_name)}</div>` : "";
           return `<div class="goal-event">
           <span class="goal-minute">${escHtml(minStr)}</span>
-          \u26BD <strong>${escHtml(scorer)}</strong>${typeLabel} ${team}
+          \u26BD <strong>${escHtml(scorer)}</strong>${typeLabel} ${team}${assistLine}
         </div>`;
         }).join("");
       } else if (events && events.length) {
@@ -1011,6 +1041,35 @@
         }).join("");
       } else {
         html += '<div style="color:var(--grey);font-size:0.78rem">No goals recorded yet</div>';
+      }
+      if (cards && cards.length) {
+        html += '<div class="detail-section-header">Cards</div>';
+        html += cards.map((c) => {
+          const minStr = c.minute !== null ? `${c.minute}'` : "";
+          const icon = c.card_type === "RED" ? "\u{1F7E5}" : c.card_type === "YELLOW_RED" ? "\u{1F7E8}\u2192\u{1F7E5}" : "\u{1F7E8}";
+          const team = c.team_name ? ` <span style="color:var(--grey);font-size:0.7rem">(${escHtml(c.team_name)})</span>` : "";
+          return `<div class="card-event">
+          <span class="goal-minute">${escHtml(minStr)}</span>
+          ${icon} ${escHtml(c.player_name ?? "Unknown")}${team}
+        </div>`;
+        }).join("");
+      }
+      if (match && match.status === "FINISHED") {
+        const statsHtml = [
+          statBarHtml("Possession", match.home_possession, match.away_possession, "%"),
+          statBarHtml("Shots on target", match.home_shots_on, match.away_shots_on),
+          statBarHtml("Corners", match.home_corners, match.away_corners)
+        ].filter(Boolean).join("");
+        if (statsHtml) {
+          html += `<div class="detail-section-header">Match stats</div>
+        <div class="stats-block">
+          <div class="stats-team-labels">
+            <span>${escHtml(match.home_team)}</span>
+            <span>${escHtml(match.away_team)}</span>
+          </div>
+          ${statsHtml}
+        </div>`;
+        }
       }
       panel.innerHTML = html;
     } catch {

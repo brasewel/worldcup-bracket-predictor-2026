@@ -131,7 +131,15 @@ export function buildMatchCardInner(m: MatchRow): string {
   if (live && live.homeScore !== null && live.awayScore !== null) {
     const isLive = live.status === 'IN_PLAY' || live.status === 'PAUSED' || live.status === 'HALFTIME';
     const color = isLive ? '#ef4444' : 'var(--gold)';
-    scoreBadge = ` <span style="color:${color};font-weight:900;font-size:1rem;margin:0 6px">${live.homeScore}\u2013${live.awayScore}${isLive ? ' \uD83D\uDD34' : ''}</span>`;
+    let clockStr = '';
+    if (isLive && live.matchMinute !== null) {
+      clockStr = live.matchInjury
+        ? ` \uD83D\uDD34 ${live.matchMinute}+${live.matchInjury}'`
+        : ` \uD83D\uDD34 ${live.matchMinute}'`;
+    } else if (isLive) {
+      clockStr = ' \uD83D\uDD34';
+    }
+    scoreBadge = ` <span style="color:${color};font-weight:900;font-size:1rem;margin:0 6px">${live.homeScore}\u2013${live.awayScore}${clockStr}</span>`;
   }
 
   let teamsHtml: string;
@@ -266,6 +274,51 @@ interface GoalEvent {
   scorer_name: string | null;
   team_name: string | null;
   goal_type: string | null;
+  assist_name: string | null;
+}
+
+interface CardEvent {
+  minute: number | null;
+  player_name: string | null;
+  team_name: string | null;
+  card_type: string | null;
+}
+
+interface MatchDetailRow {
+  home_team: string;
+  away_team: string;
+  home_score: number | null;
+  away_score: number | null;
+  home_score_ht: number | null;
+  away_score_ht: number | null;
+  status: string;
+  winner: string | null;
+  home_possession: number | null;
+  away_possession: number | null;
+  home_shots_on: number | null;
+  away_shots_on: number | null;
+  home_corners: number | null;
+  away_corners: number | null;
+  home_yellow: number | null;
+  away_yellow: number | null;
+  home_red: number | null;
+  away_red: number | null;
+}
+
+function statBarHtml(label: string, home: number | null, away: number | null, suffix = ''): string {
+  if (home === null || away === null) return '';
+  const total = home + away;
+  const homePct = total > 0 ? Math.round(home / total * 100) : 50;
+  const awayPct = 100 - homePct;
+  return `<div class="stat-row">
+    <span class="stat-val">${home}${suffix}</span>
+    <div class="stat-bars">
+      <div class="stat-bar-home" style="width:${homePct}%"></div>
+      <div class="stat-bar-away" style="width:${awayPct}%"></div>
+    </div>
+    <span class="stat-val stat-val--right">${away}${suffix}</span>
+    <span class="stat-label">${label}</span>
+  </div>`;
 }
 
 export async function toggleMatchDetail(matchId: number): Promise<void> {
@@ -277,10 +330,11 @@ export async function toggleMatchDetail(matchId: number): Promise<void> {
   try {
     const data = await apiFetch<{
       events: Array<{ home_score: number; away_score: number; detected_at: number }>;
-      match: { home_team: string; away_team: string; home_score: number | null; away_score: number | null; home_score_ht: number | null; away_score_ht: number | null; status: string; winner: string | null } | null;
+      match: MatchDetailRow | null;
       goals: GoalEvent[];
+      cards: CardEvent[];
     }>('/api/match-events/' + matchId);
-    const { events, match, goals } = data;
+    const { events, match, goals, cards } = data;
     const ht = (match && match.home_score_ht !== null) ? `HT: ${match.home_score_ht}\u2013${match.away_score_ht}` : '';
     let html = '';
 
@@ -290,8 +344,8 @@ export async function toggleMatchDetail(matchId: number): Promise<void> {
       html += `<div class="match-summary-header" style="color:#ef4444">\uD83D\uDD34 Live ${ht ? '\u00b7 HT: ' + ht : ''}</div>`;
     }
 
+    // Goals + assists
     if (goals && goals.length) {
-      // Render per-goal scorer rows
       html += goals.map(g => {
         const minStr = g.minute !== null
           ? (g.extra_time ? `${g.minute}+${g.extra_time}'` : `${g.minute}'`)
@@ -301,13 +355,15 @@ export async function toggleMatchDetail(matchId: number): Promise<void> {
         const typeLabel = g.goal_type === 'OWN' ? ' <span class="goal-type-badge">OG</span>'
           : g.goal_type === 'PENALTY' ? ' <span class="goal-type-badge">PEN</span>'
           : '';
+        const assistLine = g.assist_name
+          ? `<div class="goal-assist">\u21B3 ${escHtml(g.assist_name)}</div>`
+          : '';
         return `<div class="goal-event">
           <span class="goal-minute">${escHtml(minStr)}</span>
-          \u26BD <strong>${escHtml(scorer)}</strong>${typeLabel} ${team}
+          \u26BD <strong>${escHtml(scorer)}</strong>${typeLabel} ${team}${assistLine}
         </div>`;
       }).join('');
     } else if (events && events.length) {
-      // Fallback: score-change snapshots
       html += events.map(e => {
         const t = new Date(e.detected_at);
         const timeStr = t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -315,6 +371,42 @@ export async function toggleMatchDetail(matchId: number): Promise<void> {
       }).join('');
     } else {
       html += '<div style="color:var(--grey);font-size:0.78rem">No goals recorded yet</div>';
+    }
+
+    // Cards
+    if (cards && cards.length) {
+      html += '<div class="detail-section-header">Cards</div>';
+      html += cards.map(c => {
+        const minStr = c.minute !== null ? `${c.minute}'` : '';
+        const icon = c.card_type === 'RED' ? '\uD83D\uDFE5'
+          : c.card_type === 'YELLOW_RED' ? '\uD83D\uDFE8\u2192\uD83D\uDFE5'
+          : '\uD83D\uDFE8';
+        const team = c.team_name ? ` <span style="color:var(--grey);font-size:0.7rem">(${escHtml(c.team_name)})</span>` : '';
+        return `<div class="card-event">
+          <span class="goal-minute">${escHtml(minStr)}</span>
+          ${icon} ${escHtml(c.player_name ?? 'Unknown')}${team}
+        </div>`;
+      }).join('');
+    }
+
+    // Match stats (finished matches only)
+    if (match && match.status === 'FINISHED') {
+      const statsHtml = [
+        statBarHtml('Possession', match.home_possession, match.away_possession, '%'),
+        statBarHtml('Shots on target', match.home_shots_on, match.away_shots_on),
+        statBarHtml('Corners', match.home_corners, match.away_corners),
+      ].filter(Boolean).join('');
+
+      if (statsHtml) {
+        html += `<div class="detail-section-header">Match stats</div>
+        <div class="stats-block">
+          <div class="stats-team-labels">
+            <span>${escHtml(match.home_team)}</span>
+            <span>${escHtml(match.away_team)}</span>
+          </div>
+          ${statsHtml}
+        </div>`;
+      }
     }
 
     panel.innerHTML = html;

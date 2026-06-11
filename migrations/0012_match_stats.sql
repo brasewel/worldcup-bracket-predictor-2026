@@ -1,0 +1,10 @@
+ALTER TABLE match_results ADD COLUMN home_possession INTEGER;
+ALTER TABLE match_results ADD COLUMN away_possession INTEGER;
+ALTER TABLE match_results ADD COLUMN home_shots_on   INTEGER;
+ALTER TABLE match_results ADD COLUMN away_shots_on   INTEGER;
+ALTER TABLE match_results ADD COLUMN home_corners    INTEGER;
+ALTER TABLE match_results ADD COLUMN away_corners    INTEGER;
+ALTER TABLE match_results ADD COLUMN home_yellow     INTEGER;
+ALTER TABLE match_results ADD COLUMN away_yellow     INTEGER;
+ALTER TABLE match_results ADD COLUMN home_red        INTEGER;
+ALTER TABLE match_results ADD COLUMN away_red        INTEGER;

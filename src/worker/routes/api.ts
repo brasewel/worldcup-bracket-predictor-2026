@@ -323,21 +323,26 @@ export async function handleApi(request: Request, env: Env): Promise<Response | 
   const matchEventsMatch = path.match(/^\/api\/match-events\/(\d+)$/);
   if (matchEventsMatch && request.method === 'GET') {
     const mn = parseInt(matchEventsMatch[1]);
-    const [events, matchRow, goals] = await Promise.all([
+    const [events, matchRow, goals, cards] = await Promise.all([
       env.DB.prepare('SELECT home_score, away_score, detected_at FROM score_events WHERE match_num = ? ORDER BY detected_at')
         .bind(mn).all<{ home_score: number; away_score: number; detected_at: number }>(),
-      env.DB.prepare('SELECT home_team, away_team, home_score, away_score, home_score_ht, away_score_ht, status, winner FROM match_results WHERE match_num = ?')
+      env.DB.prepare(`SELECT home_team, away_team, home_score, away_score, home_score_ht, away_score_ht, status, winner,
+         home_possession, away_possession, home_shots_on, away_shots_on,
+         home_corners, away_corners, home_yellow, away_yellow, home_red, away_red
+         FROM match_results WHERE match_num = ?`)
         .bind(mn).first(),
-      env.DB.prepare('SELECT minute, extra_time, scorer_name, team_name, goal_type FROM goal_events WHERE match_num = ? ORDER BY minute ASC, extra_time ASC')
-        .bind(mn).all<{ minute: number | null; extra_time: number | null; scorer_name: string | null; team_name: string | null; goal_type: string | null }>(),
+      env.DB.prepare('SELECT minute, extra_time, scorer_name, team_name, goal_type, assist_name FROM goal_events WHERE match_num = ? ORDER BY minute ASC, extra_time ASC')
+        .bind(mn).all<{ minute: number | null; extra_time: number | null; scorer_name: string | null; team_name: string | null; goal_type: string | null; assist_name: string | null }>(),
+      env.DB.prepare('SELECT minute, player_name, team_name, card_type FROM card_events WHERE match_num = ? ORDER BY minute ASC')
+        .bind(mn).all<{ minute: number | null; player_name: string | null; team_name: string | null; card_type: string | null }>(),
     ]);
-    return json({ events: events.results, match: matchRow, goals: goals.results });
+    return json({ events: events.results, match: matchRow, goals: goals.results, cards: cards.results });
   }
 
   // GET /api/match-results
   if (path === '/api/match-results' && request.method === 'GET') {
     const rows = await env.DB.prepare(
-      'SELECT match_num, home_team, away_team, home_score, away_score, status FROM match_results ORDER BY match_num'
+      'SELECT match_num, home_team, away_team, home_score, away_score, status, match_minute, match_injury FROM match_results ORDER BY match_num'
     ).all();
     return json({ results: rows.results });
   }
