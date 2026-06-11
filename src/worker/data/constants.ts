@@ -1,5 +1,5 @@
-// June 11, 2026 21:00 UTC = 5:00 PM ET (Mexico vs South Africa kickoff)
-export const DEADLINE_ISO = '2026-06-11T21:00:00Z';
+// June 11, 2026 19:00 UTC = 3:00 PM ET (Mexico vs South Africa kickoff)
+export const DEADLINE_ISO = '2026-06-11T19:00:00Z';
 export const DEADLINE_MS = new Date(DEADLINE_ISO).getTime();
 
 export const GROUPS: Record<string, { flag: string; name: string }[]> = {

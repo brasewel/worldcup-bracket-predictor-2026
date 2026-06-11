@@ -303,7 +303,7 @@ async function viewBracket(idxOrEmail: number | string, displayName: string): Pr
 
   // Only allow viewing your own bracket before the deadline
   if (!isPastDeadline() && email !== state.email) {
-    showToast('\uD83D\uDD12 Brackets are hidden until picks close at 5 PM ET today.', 'error');
+    showToast('\uD83D\uDD12 Brackets are hidden until picks close at 3 PM ET today.', 'error');
     return;
   }
   try {
@@ -491,7 +491,7 @@ function shareMyBracket(): void {
 }
 
 function copyInviteMessage(): void {
-  const msg = '\uD83C\uDFC6 FIFA 2026 Bracket Pool \u2014 join before 5 PM ET today!\n' +
+  const msg = '\uD83C\uDFC6 FIFA 2026 Bracket Pool \u2014 join before 3 PM ET today!\n' +
     location.origin + location.pathname + '\nPassword: sofluffy';
   if (navigator.clipboard) {
     navigator.clipboard.writeText(msg)

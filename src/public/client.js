@@ -252,7 +252,7 @@
   }
 
   // src/client/state.ts
-  var DEADLINE = (/* @__PURE__ */ new Date("2026-06-11T21:00:00Z")).getTime();
+  var DEADLINE = (/* @__PURE__ */ new Date("2026-06-11T19:00:00Z")).getTime();
   var state = {
     name: "",
     email: "",
@@ -1875,7 +1875,7 @@
       return;
     }
     if (!isPastDeadline() && email !== state.email) {
-      showToast("\u{1F512} Brackets are hidden until picks close at 5 PM ET today.", "error");
+      showToast("\u{1F512} Brackets are hidden until picks close at 3 PM ET today.", "error");
       return;
     }
     try {
@@ -2043,7 +2043,7 @@
     }
   }
   function copyInviteMessage() {
-    const msg = "\u{1F3C6} FIFA 2026 Bracket Pool \u2014 join before 5 PM ET today!\n" + location.origin + location.pathname + "\nPassword: sofluffy";
+    const msg = "\u{1F3C6} FIFA 2026 Bracket Pool \u2014 join before 3 PM ET today!\n" + location.origin + location.pathname + "\nPassword: sofluffy";
     if (navigator.clipboard) {
       navigator.clipboard.writeText(msg).then(() => showToast("\u{1F4CB} Invite message copied! Paste it into WhatsApp.", "success")).catch(() => prompt("Copy this invite message:", msg));
     } else {

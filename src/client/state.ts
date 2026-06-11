@@ -1,7 +1,7 @@
 import { GROUPS_DATA } from './data';
 
-// June 11, 2026 5:00 PM ET = 21:00 UTC
-export const DEADLINE: number = new Date('2026-06-11T21:00:00Z').getTime();
+// June 11, 2026 3:00 PM ET = 19:00 UTC (first match kickoff)
+export const DEADLINE: number = new Date('2026-06-11T19:00:00Z').getTime();
 
 export interface AppState {
   name: string;
