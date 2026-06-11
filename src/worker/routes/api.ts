@@ -349,8 +349,8 @@ export async function handleApi(request: Request, env: Env): Promise<Response | 
 
   // POST /api/sync-matches (manual trigger)
   if (path === '/api/sync-matches' && request.method === 'POST') {
-    await syncLiveScores(env);
     await syncMatchResults(env);
+    await syncLiveScores(env);
     return json({ ok: true });
   }
 

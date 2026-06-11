@@ -16,21 +16,23 @@ interface WC26Game {
   type: string | null;          // "group" | "knockout"
 }
 
-/** Parse PostgreSQL-style array string {"Name 9'", "Name2 45'"} → string[] */
+/** Parse PostgreSQL-style array string {"Name 9'","Name2 45'"} → string[] */
 function parseScorers(raw: string | null): string[] {
   if (!raw || raw === 'null') return [];
-  // Strip outer braces, then split on comma-separated quoted strings
   const inner = raw.replace(/^\{/, '').replace(/\}$/, '');
+  if (!inner.trim()) return [];
   const results: string[] = [];
-  // Match content between smart quotes or regular quotes
-  const re = /[\u201c\u201d"](.*?)[\u201c\u201d"]/g;
+  // Match content between any kind of opening/closing quote (smart or straight)
+  // \u201c = " (left double), \u201d = " (right double)
+  const re = /[\u201c\u201d\u0022](.*?)[\u201c\u201d\u0022]/g;
   let match: RegExpExecArray | null;
   while ((match = re.exec(inner)) !== null) {
     if (match[1].trim()) results.push(match[1].trim());
   }
-  // Fallback: if no quoted entries found, try raw comma split
-  if (!results.length && inner.trim()) {
-    results.push(...inner.split(',').map(s => s.trim()).filter(Boolean));
+  // Fallback: strip all quote chars and split on commas
+  if (!results.length) {
+    const stripped = inner.replace(/[\u201c\u201d\u0022]/g, '');
+    results.push(...stripped.split(',').map(s => s.trim()).filter(Boolean));
   }
   return results;
 }
@@ -77,9 +79,10 @@ export async function syncLiveScores(env: Env): Promise<void> {
     const homeScore = g.home_score !== null && g.home_score !== '' ? parseInt(g.home_score, 10) : null;
     const awayScore = g.away_score !== null && g.away_score !== '' ? parseInt(g.away_score, 10) : null;
 
-    const isFinished = g.finished === 'TRUE';
+    // The API uses both g.finished === 'TRUE' and g.time_elapsed === 'finished'
+    const isFinished = g.finished === 'TRUE' || g.time_elapsed === 'finished';
     const isLive = !isFinished && g.time_elapsed === 'live';
-    const isHalfTime = !isFinished && g.time_elapsed === 'halftime';
+    const isHalfTime = !isFinished && (g.time_elapsed === 'halftime' || g.time_elapsed === 'half-time');
 
     // Map to our status values
     let status: string;

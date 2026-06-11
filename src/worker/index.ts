@@ -34,7 +34,7 @@ export default {
   },
 
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
-    // Run live score sync first (fast, real-time community API), then full FD sync for rich stats
-    ctx.waitUntil(syncLiveScores(env).then(() => syncMatchResults(env)));
+    // FD sync runs first for rich stats, then live sync overwrites score/status with real-time data
+    ctx.waitUntil(syncMatchResults(env).then(() => syncLiveScores(env)));
   },
 };
