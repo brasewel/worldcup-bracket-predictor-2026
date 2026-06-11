@@ -21,17 +21,26 @@ interface WC26Game {
   type: string | null;          // "group" | "knockout"
 }
 
-/** Parse PostgreSQL-style array string {"Name 9'","Name2 45'"} → string[] */
+/** Parse PostgreSQL-style array string {"Name 9'","Name2 45'"} → string[]
+ *
+ * The API uses mixed smart/straight quotes inconsistently — e.g. the second
+ * entry in a multi-scorer string can open with \u201d (right smart quote)
+ * instead of \u201c (left smart quote).  The strategy here is to split on
+ * any run of quote chars and take every odd-indexed token (the content between
+ * delimiters), which is robust regardless of which quote flavour is used.
+ */
 function parseScorers(raw: string | null): string[] {
   if (!raw || raw === 'null') return [];
-  const inner = raw.replace(/^\{/, '').replace(/\}$/, '');
-  if (!inner.trim()) return [];
+  const inner = raw.replace(/^\{/, '').replace(/\}$/, '').trim();
+  if (!inner) return [];
+
+  // Split on any sequence of smart/straight quotes (the delimiters)
+  const parts = inner.split(/[\u201c\u201d"]+/);
+  // Odd-indexed parts are the content between quote pairs
   const results: string[] = [];
-  // \u201c = " (left double smart quote), \u201d = " (right double smart quote)
-  const re = /[\u201c\u201d"](.*?)[\u201c\u201d"]/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(inner)) !== null) {
-    if (m[1].trim()) results.push(m[1].trim());
+  for (let i = 1; i < parts.length; i += 2) {
+    const s = parts[i].trim();
+    if (s) results.push(s);
   }
   // Fallback: strip all quote chars and split on commas
   if (!results.length) {
@@ -40,11 +49,13 @@ function parseScorers(raw: string | null): string[] {
   return results;
 }
 
-/** Parse scorer string "J. Quiñones 9'" → { name, minute } */
+/** Parse scorer string "J. Quiñones 9'" → { name, minute }
+ *  Handles straight apostrophe, prime (′), and right single smart quote (').
+ */
 function parseScorer(entry: string): { name: string; minute: number | null } {
-  const minuteMatch = entry.match(/(\d+)(?:\+\d+)?['′]?\s*$/);
+  const minuteMatch = entry.match(/(\d+)(?:\+\d+)?['\u2032\u2019]?\s*$/);
   const minute = minuteMatch ? parseInt(minuteMatch[1], 10) : null;
-  const name = entry.replace(/\s*\d+(?:\+\d+)?['′]?\s*$/, '').trim();
+  const name = entry.replace(/\s*\d+(?:\+\d+)?['\u2032\u2019]?\s*$/, '').trim();
   return { name, minute };
 }
 
@@ -60,7 +71,14 @@ export async function syncLiveScores(env: Env): Promise<void> {
     const res = await fetch('https://worldcup26.ir/get/games');
     if (!res.ok) return;
     const raw = await res.json() as unknown;
-    games = Array.isArray(raw) ? (raw as WC26Game[]) : [];
+    // API returns either a bare array or { games: [...] }
+    if (Array.isArray(raw)) {
+      games = raw as WC26Game[];
+    } else if (raw && typeof raw === 'object' && Array.isArray((raw as { games?: unknown }).games)) {
+      games = (raw as { games: WC26Game[] }).games;
+    } else {
+      return;
+    }
     if (!games.length) return;
   } catch {
     return;
@@ -279,17 +297,26 @@ export async function syncMatchStats(env: Env): Promise<void> {
       now, matchNum,
     ));
 
-    // Goals with assists (richer than worldcup26.ir scorer strings)
+    // Goals with assists — upsert so FD's richer data (extra_time, assist) wins
+    // for finished matches. INSERT OR REPLACE would drop the row id; use
+    // INSERT OR IGNORE + UPDATE instead to safely backfill assist_name.
     for (const g of m.goals ?? []) {
+      const scorerName = g.scorer?.name ?? null;
+      const teamName   = g.team?.name ?? null;
+      const goalType   = g.type ?? null;
+      const minute     = g.minute ?? null;
       goalStmts.push(env.DB.prepare(
-        `INSERT OR IGNORE INTO goal_events
+        `INSERT INTO goal_events
            (match_num, minute, extra_time, scorer_name, team_name, goal_type, assist_name)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(match_num, minute, scorer_name, goal_type) DO UPDATE SET
+           extra_time  = excluded.extra_time,
+           assist_name = excluded.assist_name,
+           team_name   = excluded.team_name`
       ).bind(
         matchNum,
-        g.minute ?? null, g.injuryTime ?? null,
-        g.scorer?.name ?? null, g.team?.name ?? null,
-        g.type ?? null, g.assist?.name ?? null,
+        minute, g.injuryTime ?? null,
+        scorerName, teamName, goalType, g.assist?.name ?? null,
       ));
     }
 

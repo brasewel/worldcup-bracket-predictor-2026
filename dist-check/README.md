@@ -1,0 +1,1 @@
+This folder contains the built output assets for the worker "worldcup-bracket" generated at 2026-06-11T21:16:33.365Z.
