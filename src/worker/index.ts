@@ -1,6 +1,6 @@
 import { handleApi } from './routes/api';
 import { serveHtml } from './routes/html';
-import { syncMatchResults, syncLiveScores } from './services/sync';
+import { syncLiveScores, syncMatchStats } from './services/sync';
 
 export interface Env {
   DB: D1Database;
@@ -34,7 +34,7 @@ export default {
   },
 
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
-    // FD sync runs first for rich stats, then live sync overwrites score/status with real-time data
-    ctx.waitUntil(syncMatchResults(env).then(() => syncLiveScores(env)));
+    // Live scores first (worldcup26.ir owns score/status), then FD stats for finished matches only
+    ctx.waitUntil(syncLiveScores(env).then(() => syncMatchStats(env)));
   },
 };

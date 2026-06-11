@@ -1,6 +1,6 @@
 import { Env } from '../index';
 import { DEADLINE_MS } from '../data/constants';
-import { syncMatchResults, syncLiveScores } from '../services/sync';
+import { syncLiveScores, syncMatchStats } from '../services/sync';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -349,8 +349,8 @@ export async function handleApi(request: Request, env: Env): Promise<Response | 
 
   // POST /api/sync-matches (manual trigger)
   if (path === '/api/sync-matches' && request.method === 'POST') {
-    await syncMatchResults(env);
     await syncLiveScores(env);
+    await syncMatchStats(env);
     return json({ ok: true });
   }
 
