@@ -84,45 +84,19 @@ export function renderLiveToday(): void {
   const todayStr = etNow.toISOString().slice(0, 10);
   const todayMatches = SCHEDULE.filter(m => m[1] === todayStr);
 
-  // Prefer showing only currently live matches; fall back to all of today's
-  const liveMatchNums = new Set(
-    todayMatches
-      .map(m => m[0])
-      .filter(num => {
-        const live = getLiveTeams(num);
-        const s = live?.status ?? 'TIMED';
-        return s === 'IN_PLAY' || s === 'PAUSED' || s === 'HALFTIME';
-      })
-  );
+  // Only show matches that are currently in progress
+  const liveMatches = todayMatches.filter(m => {
+    const s = getLiveTeams(m[0])?.status ?? 'TIMED';
+    return s === 'IN_PLAY' || s === 'PAUSED' || s === 'HALFTIME';
+  });
 
-  const matchesToShow = liveMatchNums.size > 0
-    ? todayMatches.filter(m => liveMatchNums.has(m[0]))
-    : todayMatches;
-
-  if (!matchesToShow.length) {
-    // Check if there are matches coming up later today
-    const upcoming = todayMatches.filter(m => {
-      const utcMs = SCHEDULE_UTC_MS[m[0]];
-      return utcMs && Date.now() < utcMs;
-    });
-    if (upcoming.length) {
-      const nextKickoff = upcoming.reduce((a, b) =>
-        (SCHEDULE_UTC_MS[a[0]] ?? Infinity) < (SCHEDULE_UTC_MS[b[0]] ?? Infinity) ? a : b
-      );
-      const [, dateStr, timeET] = nextKickoff;
-      container.innerHTML = `<div class="live-today-empty">No matches live right now.<br>Next kickoff: <strong>${formatMatchTime(dateStr, timeET)} ET</strong></div>`;
-    } else {
-      container.innerHTML = `<div class="live-today-empty">No matches today. Check the <button class="link-btn" onclick="window.__app.switchTabPublic('schedule')">Schedule</button> tab for upcoming fixtures.</div>`;
-    }
+  if (!liveMatches.length) {
+    container.innerHTML = '';
     return;
   }
 
-  const sectionLabel = liveMatchNums.size > 0
-    ? `<div class="live-today-section-label">🔴 Live now</div>`
-    : `<div class="live-today-section-label">Today's matches</div>`;
-
-  const cards = matchesToShow.map(m => buildLiveTodayCard(m[0])).join('');
-  container.innerHTML = `${sectionLabel}<div class="live-today-list">${cards}</div>`;
+  const cards = liveMatches.map(m => buildLiveTodayCard(m[0])).join('');
+  container.innerHTML = `<div class="live-today-list">${cards}</div>`;
 }
 
 let liveTodayTimer: ReturnType<typeof setInterval> | undefined;
