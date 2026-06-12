@@ -1213,6 +1213,14 @@ body {
   font-weight: 400;
 }
 .live-today-score-sep { margin: 0 3px; }
+.live-today-section-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--grey);
+  padding: 8px 4px 4px;
+}
 .live-today-empty {
   color: var(--grey);
   font-size: 0.85rem;

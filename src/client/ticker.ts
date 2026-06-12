@@ -5,7 +5,9 @@ import { getLiveTeams } from './liveResults';
 
 export function renderTicker(): void {
   const ticker = document.getElementById('score-ticker')!;
-  const todayStr = new Date().toISOString().slice(0, 10);
+  // Use ET (UTC-4) to match the date format stored in SCHEDULE
+  const etNow = new Date(Date.now() - 4 * 60 * 60 * 1000);
+  const todayStr = etNow.toISOString().slice(0, 10);
   const todayMatches = SCHEDULE.filter(m => m[1] === todayStr);
   if (!todayMatches.length) { ticker.style.display = 'none'; return; }
 
