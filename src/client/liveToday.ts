@@ -15,8 +15,9 @@ function buildLiveTodayCard(matchNum: number): string {
   const status = live ? live.status : 'TIMED';
   const isLive = status === 'IN_PLAY' || status === 'PAUSED' || status === 'HALFTIME';
   const isFinished = status === 'FINISHED';
-  const kickoffUtcMs = SCHEDULE_UTC_MS[matchNum];
-  const isStarted = kickoffUtcMs ? Date.now() >= kickoffUtcMs : false;
+  const kickoffUtcMs = SCHEDULE_UTC_MS[matchNum] ?? 0;
+  const nowMs = Date.now();
+  const isPastKickoff = kickoffUtcMs > 0 && nowMs >= kickoffUtcMs;
 
   // Status badge
   let statusBadgeHtml: string;
@@ -30,8 +31,8 @@ function buildLiveTodayCard(matchNum: number): string {
     statusBadgeHtml = `<span class="live-today-status live-today-status--live"><span class="live-dot"></span> LIVE${escHtml(clockStr)}</span>`;
   } else if (isFinished) {
     statusBadgeHtml = `<span class="live-today-status live-today-status--finished">Full time</span>`;
-  } else if (isStarted) {
-    statusBadgeHtml = `<span class="live-today-status live-today-status--pending">In progress</span>`;
+  } else if (isPastKickoff) {
+    statusBadgeHtml = `<span class="live-today-status live-today-status--live"><span class="live-dot"></span> LIVE</span>`;
   } else {
     statusBadgeHtml = `<span class="live-today-status live-today-status--upcoming">${formatMatchTime(dateStr, timeET)} ET</span>`;
   }
@@ -84,10 +85,17 @@ export function renderLiveToday(): void {
   const todayStr = etNow.toISOString().slice(0, 10);
   const todayMatches = SCHEDULE.filter(m => m[1] === todayStr);
 
-  // Only show matches that are currently in progress
+  // Show matches that are in progress — either confirmed live by the API,
+  // or past their scheduled kickoff and not yet marked FINISHED
+  const nowMs = Date.now();
+  const MATCH_DURATION_MS = 115 * 60 * 1000; // ~115 min covers 90 + ET + breaks
   const liveMatches = todayMatches.filter(m => {
     const s = getLiveTeams(m[0])?.status ?? 'TIMED';
-    return s === 'IN_PLAY' || s === 'PAUSED' || s === 'HALFTIME';
+    if (s === 'IN_PLAY' || s === 'PAUSED' || s === 'HALFTIME') return true;
+    if (s === 'FINISHED') return false;
+    // API hasn't caught up yet — show if past kickoff and within match window
+    const kickoff = SCHEDULE_UTC_MS[m[0]] ?? 0;
+    return kickoff > 0 && nowMs >= kickoff && nowMs <= kickoff + MATCH_DURATION_MS;
   });
 
   if (!liveMatches.length) {

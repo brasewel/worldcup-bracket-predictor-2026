@@ -1786,8 +1786,9 @@
     const status = live ? live.status : "TIMED";
     const isLive = status === "IN_PLAY" || status === "PAUSED" || status === "HALFTIME";
     const isFinished = status === "FINISHED";
-    const kickoffUtcMs = SCHEDULE_UTC_MS[matchNum];
-    const isStarted = kickoffUtcMs ? Date.now() >= kickoffUtcMs : false;
+    const kickoffUtcMs = SCHEDULE_UTC_MS[matchNum] ?? 0;
+    const nowMs = Date.now();
+    const isPastKickoff = kickoffUtcMs > 0 && nowMs >= kickoffUtcMs;
     let statusBadgeHtml;
     if (isLive) {
       let clockStr = "";
@@ -1797,8 +1798,8 @@
       statusBadgeHtml = `<span class="live-today-status live-today-status--live"><span class="live-dot"></span> LIVE${escHtml(clockStr)}</span>`;
     } else if (isFinished) {
       statusBadgeHtml = `<span class="live-today-status live-today-status--finished">Full time</span>`;
-    } else if (isStarted) {
-      statusBadgeHtml = `<span class="live-today-status live-today-status--pending">In progress</span>`;
+    } else if (isPastKickoff) {
+      statusBadgeHtml = `<span class="live-today-status live-today-status--live"><span class="live-dot"></span> LIVE</span>`;
     } else {
       statusBadgeHtml = `<span class="live-today-status live-today-status--upcoming">${formatMatchTime(dateStr, timeET)} ET</span>`;
     }
@@ -1835,13 +1836,18 @@
     const etNow = new Date(Date.now() - 4 * 60 * 60 * 1e3);
     const todayStr = etNow.toISOString().slice(0, 10);
     const todayMatches = SCHEDULE.filter((m) => m[1] === todayStr);
+    const nowMs = Date.now();
+    const MATCH_DURATION_MS = 115 * 60 * 1e3;
     const liveMatches = todayMatches.filter((m) => {
       const s = getLiveTeams(m[0])?.status ?? "TIMED";
-      return s === "IN_PLAY" || s === "PAUSED" || s === "HALFTIME";
+      if (s === "IN_PLAY" || s === "PAUSED" || s === "HALFTIME") return true;
+      if (s === "FINISHED") return false;
+      const kickoff = SCHEDULE_UTC_MS[m[0]] ?? 0;
+      return kickoff > 0 && nowMs >= kickoff && nowMs <= kickoff + MATCH_DURATION_MS;
     });
     if (!liveMatches.length) {
-      const nowMs = Date.now();
-      const next = SCHEDULE.map((m) => ({ m, utcMs: SCHEDULE_UTC_MS[m[0]] ?? 0 })).filter(({ utcMs }) => utcMs > nowMs).sort((a, b) => a.utcMs - b.utcMs)[0];
+      const nowMs2 = Date.now();
+      const next = SCHEDULE.map((m) => ({ m, utcMs: SCHEDULE_UTC_MS[m[0]] ?? 0 })).filter(({ utcMs }) => utcMs > nowMs2).sort((a, b) => a.utcMs - b.utcMs)[0];
       if (next) {
         const [, dateStr, timeET, t1raw, t2raw] = next.m;
         const f1 = getFlagForTeam(t1raw ?? "");
