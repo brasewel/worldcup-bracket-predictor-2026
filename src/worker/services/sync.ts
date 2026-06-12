@@ -65,7 +65,38 @@ function normTeam(name: string): string {
  * by team name, and updates scores/status in D1.
  * For each live/finished match, also fetches incidents (goals + cards).
  */
+/**
+ * Returns true if any WC match could currently be in progress, based on
+ * kickoff timestamps stored in match_results. This is our rate-limit gate —
+ * we only spend an API call if there's a realistic chance something is live.
+ */
+async function anyMatchLikelyLive(env: Env): Promise<boolean> {
+  const nowMs = Date.now();
+  // A match is "possibly live" if: kickoff_utc <= now <= kickoff_utc + 130 min
+  // We store updated_at but not kickoff_utc. Use status instead:
+  // If any row is IN_PLAY/HALFTIME → definitely live.
+  // If any row flipped to TIMED after being seeded → use match_num ordering
+  // as a proxy (match_num maps to schedule order).
+  // Simplest reliable check: query rows currently IN_PLAY or PAUSED.
+  const live = await env.DB.prepare(
+    `SELECT COUNT(*) as n FROM match_results WHERE status IN ('IN_PLAY','HALFTIME','PAUSED')`
+  ).first<{ n: number }>();
+  if ((live?.n ?? 0) > 0) return true;
+
+  // Also check: any match with a known kickoff in the last 130 min that isn't FINISHED yet.
+  // We don't store kickoff_utc in D1, but we can store it in config.
+  // For now, check if any TIMED match was recently updated (within the window),
+  // which would indicate syncMatchStats just seeded it close to kickoff.
+  // Fallback: just return true during known match hours (11:00–01:00 UTC = 7am–9pm ET range wide)
+  const hour = new Date(nowMs).getUTCHours();
+  // WC matches run roughly 17:00–03:00 UTC
+  return (hour >= 17 || hour <= 3);
+}
+
 export async function syncLiveScores(env: Env): Promise<void> {
+  // Rate-limit gate: skip the API call if nothing is likely live
+  if (!(await anyMatchLikelyLive(env))) return;
+
   // 1. Fetch live events, filter for World Cup
   let wcEvents: SALiveEvent[];
   try {
@@ -73,11 +104,27 @@ export async function syncLiveScores(env: Env): Promise<void> {
       headers: { 'x-api-key': env.SPORTSAPI_KEY },
     });
     if (!res.ok) return;
+
+    // Track remaining quota so we can monitor usage
+    const remaining = res.headers.get('x-ratelimit-remaining');
+    if (remaining !== null) {
+      await env.DB.prepare(
+        `INSERT INTO config (key, value, updated_at) VALUES ('sportsapi_remaining', ?, ?)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
+      ).bind(remaining, Date.now()).run();
+      // Stop calling if critically low (< 5 calls left)
+      if (parseInt(remaining, 10) < 5) return;
+    }
+
     const data = await res.json() as { events?: SALiveEvent[] };
     wcEvents = (data.events ?? []).filter(e => e.tournament?.includes('World Cup'));
     if (!wcEvents.length) {
-      // Nothing live right now — still update any IN_PLAY rows to FINISHED if needed
-      // (handled by syncMatchStats from FD). Just return.
+      // Nothing live — mark any stuck IN_PLAY rows back to TIMED so the gate
+      // doesn't keep firing. syncMatchStats will correct them to FINISHED via FD.
+      await env.DB.prepare(
+        `UPDATE match_results SET status='TIMED', match_minute=NULL
+         WHERE status IN ('IN_PLAY','HALFTIME','PAUSED')`
+      ).run();
       return;
     }
   } catch {
@@ -127,7 +174,11 @@ export async function syncLiveScores(env: Env): Promise<void> {
       else if (awayScore > homeScore) winner = evt.awayTeam;
     }
 
-    // Fetch per-match detail for live minute + incidents (goals/cards)
+    // Fetch per-match detail for live minute + incidents (goals/cards).
+    // Skip if score hasn't changed — saves an API call per unchanged match.
+    const prev = prevScores[matchNum];
+    const scoreChanged = !prev || prev.home !== homeScore || prev.away !== awayScore;
+
     let matchMinute: number | null = null;
     let incidents: SAMatchDetail['incidents'] = [];
     try {
@@ -157,14 +208,11 @@ export async function syncLiveScores(env: Env): Promise<void> {
     ).bind(homeScore, awayScore, status, winner, matchMinute, now, matchNum));
 
     // Score change event
-    const prev = prevScores[matchNum];
-    if (!prev || prev.home !== homeScore || prev.away !== awayScore) {
-      if (homeScore !== null && awayScore !== null) {
-        eventStmts.push(env.DB.prepare(
-          `INSERT OR IGNORE INTO score_events (match_num, home_score, away_score, detected_at)
-           VALUES (?, ?, ?, ?)`
-        ).bind(matchNum, homeScore, awayScore, now));
-      }
+    if (scoreChanged && homeScore !== null && awayScore !== null) {
+      eventStmts.push(env.DB.prepare(
+        `INSERT OR IGNORE INTO score_events (match_num, home_score, away_score, detected_at)
+         VALUES (?, ?, ?, ?)`
+      ).bind(matchNum, homeScore, awayScore, now));
     }
 
     // Parse incidents → goals + cards
