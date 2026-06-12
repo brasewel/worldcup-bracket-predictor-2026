@@ -91,7 +91,26 @@ export function renderLiveToday(): void {
   });
 
   if (!liveMatches.length) {
-    container.innerHTML = '';
+    // Find the next upcoming match across the whole schedule
+    const nowMs = Date.now();
+    const next = SCHEDULE
+      .map(m => ({ m, utcMs: SCHEDULE_UTC_MS[m[0]] ?? 0 }))
+      .filter(({ utcMs }) => utcMs > nowMs)
+      .sort((a, b) => a.utcMs - b.utcMs)[0];
+
+    if (next) {
+      const [, dateStr, timeET, t1raw, t2raw] = next.m;
+      const f1 = getFlagForTeam(t1raw ?? '');
+      const f2 = getFlagForTeam(t2raw ?? '');
+      container.innerHTML = `<div class="live-today-empty">
+        No matches live right now.<br>
+        <span style="color:var(--gold);font-weight:600">Next up:</span>
+        ${f1} ${escHtml(t1raw ?? 'TBD')} vs ${f2} ${escHtml(t2raw ?? 'TBD')}
+        <br><span style="color:var(--grey);font-size:0.8rem">${formatMatchTime(dateStr, timeET)} ET</span>
+      </div>`;
+    } else {
+      container.innerHTML = `<div class="live-today-empty">No upcoming matches scheduled.</div>`;
+    }
     return;
   }
 
